@@ -137,7 +137,11 @@ while ($true) {
 
     if (($now - $lastLine).TotalSeconds -ge 10) {
         $lastLine = $now
-        $ago = if ($lastReport -eq [datetime]::MinValue) { 'never' } else { [int](($now - $lastReport).TotalSeconds).ToString() + 's ago' }
+        $ago = 'never'
+        if ($lastReport -ne [datetime]::MinValue) {
+            $secs = [int](($now - $lastReport).TotalSeconds)
+            $ago = '' + $secs + 's ago'
+        }
         Write-Host ('[' + $now.ToString('HH:mm:ss') + '] windowed processes: ' + $procs.Count + '   last report: ' + $ago) -ForegroundColor DarkGray
     }
 

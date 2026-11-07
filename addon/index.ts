@@ -188,7 +188,10 @@ export async function apply(ctx: Context) {
         n: String(i?.n ?? '').slice(0, 120), t: String(i?.t ?? '').slice(0, 200), m: Number(i?.m) || 0,
       })).filter((i: any) => i.n);
       const rules = await loadRules();
-      const suspects = items.filter((i: any) => rules.some((r) => r.test(i.n) || r.test(i.t))).map((i: any) => ({ n: i.n, t: i.t }));
+      const seen = new Set<string>();
+      const suspects = items.filter((i: any) => rules.some((r) => r.test(i.n) || r.test(i.t)))
+        .filter((i: any) => (seen.has(i.n) ? false : (seen.add(i.n), true)))
+        .map((i: any) => ({ n: i.n, t: i.t }));
       const events = (Array.isArray(body.events) ? body.events : []).slice(0, 50).map((e: any) => ({
         n: String(e?.n ?? '').slice(0, 120), t: String(e?.t ?? '').slice(0, 200),
         act: e?.act === 'stop' ? 'stop' : 'start', at: Number(e?.at) || Date.now(),
