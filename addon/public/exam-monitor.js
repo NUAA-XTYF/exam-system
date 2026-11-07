@@ -5,7 +5,8 @@
   async function action(action2, extra = {}) {
     const response = await fetch(location.pathname, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: action2, ...extra }) });
     if (!response.ok) throw new Error(`\u64CD\u4F5C\u5931\u8D25 (${response.status})`);
-    message.textContent = "\u64CD\u4F5C\u5DF2\u63D0\u4EA4";
+    const data = await response.json().catch(() => ({}));
+    message.textContent = data.message || "\u64CD\u4F5C\u5DF2\u63D0\u4EA4";
     await refresh();
   }
   async function loadHistory(studentId) {

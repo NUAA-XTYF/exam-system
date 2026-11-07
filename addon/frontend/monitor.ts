@@ -2,7 +2,9 @@
 const message = document.getElementById('message')!;
 async function action(action: string, extra: object={}) {
   const response=await fetch(location.pathname,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...extra})});
-  if(!response.ok) throw new Error(`操作失败 (${response.status})`); message.textContent='操作已提交';await refresh();
+  if(!response.ok) throw new Error(`操作失败 (${response.status})`);
+  const data=await response.json().catch(()=>({}));
+  message.textContent=data.message||'操作已提交';await refresh();
 }
 async function loadHistory(studentId:number) {
   const response=await fetch(`${location.pathname}?history=${studentId}`);if(!response.ok)throw new Error('无法读取图片');

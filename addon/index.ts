@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { Device } from './config';
 import { Store, Exam } from './storage/store';
@@ -92,6 +93,33 @@ export async function apply(ctx: Context) {
         const mappings=validMappings(typeof body.mappings==='string'?JSON.parse(body.mappings):body.mappings,new Set(registry.keys()));
         if((await store.exams.findOne({_id:this.examKey}))?.active) throw new ForbiddenError('Stop monitoring before changing mappings');
         await store.exams.updateOne({_id:this.examKey},{$set:{domainId:this.args.domainId,contestId:this.contestId,endAt:this.endAt,mappings,active:false,manual:[]}},{upsert:true});
+      } else if(action==='importFromLogin') {
+        // Build the mapping from each account's most recent login IP. Works for BYOD
+        // laptops where the MAC address is unknown and IPs are handed out by DHCP.
+        if((await store.exams.findOne({_id:this.examKey}))?.active) throw new ForbiddenError('Stop monitoring before changing mappings');
+        const minutes=Number(body.minutes)>0?Number(body.minutes):120;
+        const prefix=typeof body.prefix==='string'&&body.prefix?body.prefix:'seat';
+        const localIps=new Set<string>(); for(const list of Object.values(os.networkInterfaces())) for(const a of list??[]) if(a?.address) localIps.add(a.address);
+        const now=Date.now();
+        const pattern='^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\d+$';
+        const users=await ctx.db.db.collection('user').find({uname:{$regex:pattern}}).project({uname:1,loginip:1,loginat:1}).toArray();
+        const byIp=new Map<string,{uid:number;at:number}>();
+        let skipped=0;
+        for(const u of users){
+          const ip=String(u.loginip??'');
+          if(!ip||localIps.has(ip)||ip.endsWith('.1')){skipped++;continue;}
+          if(!registry.has('ip-'+ip.replace(/\./g,'-'))){skipped++;continue;}
+          const at=u.loginat?new Date(u.loginat as any).getTime():0;
+          if(now-at>minutes*60000){skipped++;continue;}
+          const prev=byIp.get(ip);
+          if(prev&&prev.at>=at){skipped++;continue;}
+          byIp.set(ip,{uid:u._id as number,at});
+        }
+        const mappings=validMappings([...byIp.entries()].map(([ip,r])=>({studentId:r.uid,deviceId:'ip-'+ip.replace(/\./g,'-')})),new Set(registry.keys()));
+        if(!mappings.length) throw new ForbiddenError('No recent logins found - ask students to log in to the OJ first');
+        await store.exams.updateOne({_id:this.examKey},{$set:{domainId:this.args.domainId,contestId:this.contestId,endAt:this.endAt,mappings,active:false,manual:[]}},{upsert:true});
+        this.response.body={ok:true,imported:mappings.length,skipped,message:'已按登录 IP 导入 '+mappings.length+' 条映射'+(skipped?'（跳过 '+skipped+' 个账号）':'')};
+        return;
       } else if(action==='start' || action==='stop') {
         const exam=await store.exams.findOne({_id:this.examKey});if(!exam?.mappings.length) throw new ForbiddenError('Import mappings first');
         if(action==='start') {
