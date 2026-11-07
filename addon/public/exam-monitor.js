@@ -50,7 +50,23 @@
         button.onclick = () => void fn().catch(showError);
         line.append(button);
       }
-      host.append(line);
+      const box = document.createElement("div");
+      box.className = "exam-monitor-row";
+      box.append(line);
+      if (row && row._id && !row.error) {
+        const img = document.createElement("img");
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.alt = `\u5B66\u751F ${mapping.studentId} \u6700\u65B0\u753B\u9762`;
+        img.title = "\u70B9\u51FB\u67E5\u770B\u5927\u56FE";
+        img.style.maxWidth = "320px";
+        img.style.borderRadius = "4px";
+        img.style.cursor = "zoom-in";
+        img.src = `${location.pathname}?image=${encodeURIComponent(row._id)}`;
+        img.onclick = () => window.open(img.src, "_blank");
+        box.append(img);
+      }
+      host.append(box);
     }
   }
   function showError(e) {
