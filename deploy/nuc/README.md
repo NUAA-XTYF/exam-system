@@ -9,7 +9,7 @@
 |---|---|---|
 | `setup-classroom.sh` | NUC（root） | 按网段批量生成凭据、`devices.json`、分发目录、`ips.txt`、`scheme.txt`；支持 `EXAM_MONITOR_SCHEME=http` |
 | `student-setup.ps1` | 学生机（管理员） | 自动识别本机 IP、拉取公钥、按 `scheme.txt` 配 HTTP/HTTPS、**写注册表开启 KeyFile 认证**、加防火墙、重启服务、WebAPI 自检 |
-| `一键配置.cmd` | 学生机（双击） | 提权入口；每次从分发服务器重新下载 `student-setup.ps1` 再执行（所以服务器上换新版立刻生效） |
+| `setup.cmd` | 学生机（双击） | 提权入口；每次从分发服务器重新下载 `student-setup.ps1` 再执行（所以服务器上换新版立刻生效） |
 | `probe-device.sh` | NUC（root） | 对单台设备真实取一张图，输出 JSON（`bytes`/`path`/`error`），用于逐台自检 |
 | `make-mappings.sh` | NUC（root） | 按 `devices.json` + HydroOJ 用户表生成监考映射 JSON |
 | `make-device-creds.sh` | NUC（root） | 只给单台设备生成凭据（零散加机器用） |

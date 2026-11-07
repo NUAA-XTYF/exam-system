@@ -117,10 +117,8 @@ chmod 644 "$OUT/scheme.txt"
 if [[ -f /opt/exam-system/tools/student-setup.ps1 ]]; then
   install -m 644 /opt/exam-system/tools/student-setup.ps1 "$OUT/student-setup.ps1"
 fi
-if [[ -f /opt/exam-system/tools/一键配置.cmd ]]; then
-  install -m 644 /opt/exam-system/tools/一键配置.cmd "$OUT/一键配置.cmd"
-  # ASCII 别名，方便用浏览器/URL 下载
-  install -m 644 /opt/exam-system/tools/一键配置.cmd "$OUT/setup.cmd"
+if [[ -f /opt/exam-system/tools/setup.cmd ]]; then
+  install -m 644 /opt/exam-system/tools/setup.cmd "$OUT/setup.cmd"
 fi
 if [[ -f /opt/exam-system/tools/probe-device.sh ]]; then
   install -m 755 /opt/exam-system/tools/probe-device.sh "$OUT/probe-device.sh"
@@ -141,14 +139,14 @@ cat <<EOF
 每台认证私钥  : $BASE/keys/ip-*-private.pem（仅本机保留）
 共享 TLS 证书 : $OUT/tls/server.crt / server.key（所有学生机共用）
 公钥分发目录  : $OUT/by-ip/<学生机IP>/key
-学生机脚本    : $OUT/一键配置.cmd（拷到学生机双击运行）
+学生机脚本    : $OUT/setup.cmd（拷到学生机双击运行）
 
 接下来：
   1) 重启 HydroOJ 使新清单生效
        pm2 restart hydrooj            （以 root 执行）
   2) 在 ${OUT} 启动临时分发服务（学生机拉取用，考完可关）
        cd $OUT && python3 -m http.server 8080 --bind 0.0.0.0
-  3) 学生机上双击 一键配置.cmd（默认连 http://192.168.3.2:8080，
+  3) 学生机上双击 setup.cmd（默认连 http://192.168.3.2:8080，
      与 ${OUT} 所在机器 IP 不一致时，用记事本改 cmd 里 OJ_SERVER 那一行）
   4) 本机逐台自检
        /opt/exam-system/tools/probe-device.sh ip-$PREFIX-$FROM   （ID 把点换成横线）

@@ -7,6 +7,6 @@ mkdir -p "$DST"
 install -m 755 "$SRC"/setup-classroom.sh "$SRC"/probe-device.sh \
               "$SRC"/make-mappings.sh "$SRC"/make-device-creds.sh "$DST"/
 install -m 644 "$SRC"/student-setup.ps1 "$SRC"/diag.ps1 "$DST"/
-install -m 644 "$SRC"/diag.cmd "$SRC"/"一键配置.cmd" "$DST"/
+install -m 644 "$SRC"/diag.cmd "$SRC"/setup.cmd "$DST"/
 echo "installed -> $DST"
 ls -l "$DST"
