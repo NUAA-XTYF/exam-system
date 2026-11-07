@@ -72,7 +72,11 @@
   function showError(e) {
     message.textContent = e.message;
   }
-  document.querySelectorAll("[data-action]").forEach((button) => button.onclick = () => void action(button.dataset.action, button.dataset.action === "import" ? { mappings: document.getElementById("mapping").value } : {}).catch(showError));
+  document.querySelectorAll("[data-action]").forEach((button) => button.onclick = () => {
+    const act = button.dataset.action;
+    const extra = act === "import" ? { mappings: document.getElementById("mapping").value } : act === "start" ? { autoStop: document.getElementById("autostop").checked } : {};
+    void action(act, extra).catch(showError);
+  });
   void refresh().catch(showError);
   setInterval(() => void refresh().catch(showError), 15e3);
 })();

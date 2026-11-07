@@ -40,7 +40,7 @@ export async function apply(ctx: Context) {
   const sync = async () => {
     if(syncing) return; syncing=true;
     try {
-      await store.exams.updateMany({ active:true, endAt:{$lte:new Date()} },{$set:{active:false}});
+      await store.exams.updateMany({ active:true, autoStop:{$ne:false}, endAt:{$lte:new Date()} },{$set:{active:false}});
       const exams = await store.exams.find({active:true}).toArray(); const wanted = new Set<string>();
       for(const exam of exams) {
         for(const mapping of exam.mappings) { const id=`${exam._id}/${mapping.studentId}`; wanted.add(id); tasks.set(id,{exam,...mapping}); scheduler.add(id); }
@@ -93,13 +93,19 @@ export async function apply(ctx: Context) {
         if((await store.exams.findOne({_id:this.examKey}))?.active) throw new ForbiddenError('Stop monitoring before changing mappings');
         await store.exams.updateOne({_id:this.examKey},{$set:{domainId:this.args.domainId,contestId:this.contestId,endAt:this.endAt,mappings,active:false,manual:[]}},{upsert:true});
       } else if(action==='start' || action==='stop') {
-        if(action==='start' && this.endAt.getTime()<=Date.now()) throw new ForbiddenError('Contest ended');
         const exam=await store.exams.findOne({_id:this.examKey});if(!exam?.mappings.length) throw new ForbiddenError('Import mappings first');
         if(action==='start') {
           const used=await store.exams.find({active:true,_id:{$ne:this.examKey},'mappings.deviceId':{$in:exam.mappings.map(m=>m.deviceId)}}).hasNext();
           if(used) throw new ForbiddenError('Device already assigned to active exam');
+          // Monitoring is started/stopped by hand at any time. autoStop=true (default) ends it at the
+          // contest end time; autoStop=false keeps it running until the operator stops it.
+          const autoStop=body.autoStop!==false;
+          let endAt=this.endAt;
+          if(autoStop && endAt.getTime()<=Date.now()) endAt=new Date(Date.now()+12*3600e3);
+          await store.exams.updateOne({_id:this.examKey},{$set:{active:true,endAt,autoStop}});
+        } else {
+          await store.exams.updateOne({_id:this.examKey},{$set:{active:false}});
         }
-        await store.exams.updateOne({_id:this.examKey},{$set:{active:action==='start',endAt:this.endAt}});
       } else if(action==='capture') {
         const studentId=Number(body.studentId);const exam=await store.exams.findOne({_id:this.examKey,active:true});
         if(!exam?.mappings.some(m=>m.studentId===studentId)) throw new ForbiddenError('Student not monitored');

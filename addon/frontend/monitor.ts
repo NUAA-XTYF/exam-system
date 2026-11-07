@@ -18,6 +18,11 @@ async function refresh(){const response=await fetch(`${location.pathname}?status
     if(row && row._id && !row.error){const img=document.createElement('img');img.loading='lazy';img.decoding='async';img.alt=`学生 ${mapping.studentId} 最新画面`;img.title='点击查看大图';img.style.maxWidth='320px';img.style.borderRadius='4px';img.style.cursor='zoom-in';img.src=`${location.pathname}?image=${encodeURIComponent(row._id)}`;img.onclick=()=>window.open(img.src,'_blank');box.append(img);}
     host.append(box);}}
 function showError(e:Error){message.textContent=e.message;}
-document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button=>button.onclick=()=>void action(button.dataset.action!,button.dataset.action==='import'?{mappings:(document.getElementById('mapping') as HTMLTextAreaElement).value}:{}).catch(showError));
+document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button=>button.onclick=()=>{
+  const act=button.dataset.action!;
+  const extra:Record<string,unknown>=act==='import'?{mappings:(document.getElementById('mapping') as HTMLTextAreaElement).value}
+    :act==='start'?{autoStop:(document.getElementById('autostop') as HTMLInputElement).checked}:{};
+  void action(act,extra).catch(showError);
+});
 void refresh().catch(showError);setInterval(()=>void refresh().catch(showError),15000);
 
