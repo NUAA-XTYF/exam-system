@@ -14,6 +14,18 @@
 | `make-mappings.sh` | NUC（root） | 按 `devices.json` + HydroOJ 用户表生成监考映射 JSON |
 | `make-device-creds.sh` | NUC（root） | 只给单台设备生成凭据（零散加机器用） |
 | `diag.ps1` / `diag.cmd` | 学生机 | 诊断：版本、配置、监听端口、文件、ACL、本机自测、日志 |
+| `watch.ps1` | 学生机 | 前台进程上报代理：1 Hz 采样有窗口的进程，30 s 报一次，进程启动/退出立即上报；上报走 `/exam-report`，按设备 token 鉴权 |
+| `make-report-tokens.sh` | NUC（root） | 为每台设备生成上报 token，写到 `/srv/exam-deploy/by-ip/<IP>/token` |
+| `make-mappings-from-login.sh` | NUC（root） | 按"学生最近一次登录 OJ 的 IP"生成映射（自带笔记本场景，不用绑 MAC） |
+
+## 两份拷贝的关系
+
+- `/opt/exam-system/tools/` 是**运行位置**（`setup-classroom.sh` 从这里取文件发布到 `/srv/exam-deploy/`）；
+- `deploy/nuc/` 是**提交进 git 的快照**，内容必须和 `tools/` 一致。
+
+现场直接改了 `tools/` 里的脚本时，提交前同步回来：
+
+
 
 ## 安装到 NUC
 

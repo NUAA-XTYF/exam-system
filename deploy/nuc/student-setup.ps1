@@ -316,6 +316,78 @@ else {
     Write-Step 'Self-check skipped in https mode (server-side probe is authoritative).'
 }
 
+# ---------- 11. process watchdog ----------
+# A foreground PowerShell window that samples windowed processes and reports
+# them to the exam server. Closing it stops reporting and the monitor page
+# then shows "agent stopped", so students are told to keep it open.
+$agentDir = Join-Path $env:ProgramData 'ExamMonitor'
+$watchPath = Join-Path $agentDir 'watch.ps1'
+$tokenPath = Join-Path $agentDir 'token.txt'
+New-Item -ItemType Directory -Force -Path $agentDir | Out-Null
+$watchReady = $false
+try {
+    if ($isHttp) {
+        Invoke-WebRequest -Uri ($base + '/watch.ps1') -OutFile $watchPath -UseBasicParsing
+        Invoke-WebRequest -Uri ($base + '/by-ip/' + $ip + '/token') -OutFile $tokenPath -UseBasicParsing
+    }
+    else {
+        Copy-Item -LiteralPath (Join-Path $base 'watch.ps1') -Destination $watchPath -Force
+        Copy-Item -LiteralPath (Join-Path $base ('by-ip\' + $ip + '\token')) -Destination $tokenPath -Force
+    }
+    & icacls $watchPath /inheritance:r /grant:r 'SYSTEM:(R)' 'Administrators:(F)' 'Users:(R)' | Out-Null
+    & icacls $tokenPath /inheritance:r /grant:r 'SYSTEM:(R)' 'Administrators:(F)' 'Users:(R)' | Out-Null
+    $watchReady = $true
+    Write-Ok 'Process watchdog installed.'
+}
+catch {
+    Write-Host ('    [!] Could not install the process watchdog: ' + $_.Exception.Message) -ForegroundColor Yellow
+}
+
+if ($watchReady) {
+    $serverBase = 'http://' + $serverHost
+    $agentArgs = '-NoLogo -NoProfile -ExecutionPolicy Bypass -File "' + $watchPath + '" -Server ' + $serverBase
+    try {
+        $startup = [Environment]::GetFolderPath('Startup')
+        $lnkPath = Join-Path $startup 'ExamMonitor.lnk'
+        $ws = New-Object -ComObject WScript.Shell
+        $lnk = $ws.CreateShortcut($lnkPath)
+        $lnk.TargetPath = 'powershell.exe'
+        $lnk.Arguments = $agentArgs
+        $lnk.WorkingDirectory = $agentDir
+        $lnk.WindowStyle = 1
+        $lnk.Description = 'Exam monitor agent'
+        $lnk.Save()
+        Write-Ok 'Watchdog will start automatically at logon.'
+        Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -like '*watch.ps1*' } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Milliseconds 600
+        Start-Process -FilePath 'powershell.exe' -ArgumentList $agentArgs
+        Write-Host '    A console window will open and must stay open during the exam.' -ForegroundColor Yellow
+    }
+    catch {
+        Write-Host ('    [!] Could not start the process watchdog: ' + $_.Exception.Message) -ForegroundColor Yellow
+    }
+}
+
+# ---------- 10. login hint ----------
+# Keep the password in sync with the HydroOJ accounts (tutorial section 9.2).
+$seat = $ip.Split('.')[-1]
+$account = 'seat' + $seat
+Write-Host ''
+Write-Host '============================================================'
+Write-Host (' Exam system : http://' + $serverHost + '/')
+if ([int]$seat -ge 101 -and [int]$seat -le 200) {
+    Write-Host (' Account     : ' + $account + '   Password: Exam@2026')
+}
+else {
+    Write-Host ' Account     : ask your teacher (this IP has no seat account)'
+}
+Write-Host ' If the teacher gave you another account, use that one instead.'
+Write-Host ' Keep the black "Exam monitor" window open during the exam.'
+Write-Host (' Details     : http://' + $serverHost + ':8080/login.html')
+Write-Host '============================================================'
+
 Write-Host ''
 Write-Ok 'Done on this PC.'
 Write-Host ('    Server-side check: /opt/exam-system/tools/probe-device.sh ' + $id) -ForegroundColor Yellow
