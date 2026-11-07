@@ -17,6 +17,7 @@
 | `watch.ps1` | 学生机 | 前台进程上报代理：1 Hz 采样有窗口的进程，30 s 报一次，进程启动/退出立即上报；上报走 `/exam-report`，按设备 token 鉴权 |
 | `make-report-tokens.sh` | NUC（root） | 为每台设备生成上报 token，写到 `/srv/exam-deploy/by-ip/<IP>/token` |
 | `make-mappings-from-login.sh` | NUC（root） | 按"学生最近一次登录 OJ 的 IP"生成映射（自带笔记本场景，不用绑 MAC） |
+| `restart.sh` | NUC（root） | 带全部 `EXAM_MONITOR_*` 环境变量重启 HydroOJ，并按 `scheme.txt` 决定是否允许 http；重启后检查插件是否加载成功 |
 
 ## 两份拷贝的关系
 

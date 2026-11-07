@@ -90,6 +90,27 @@ export async function apply(ctx: Context) {
     const cleanup=setInterval(()=>void store.clean().catch(()=>console.error('Exam monitor cleanup failed')),3600000);
     ctx.effect(()=>()=>{clearInterval(tick);clearInterval(poll);clearInterval(cleanup);scheduler.stop();});
   }
+  // Build a seat mapping from each account's most recent login IP (BYOD / DHCP friendly).
+  const buildLoginMappings=async(prefix:string,minutes:number)=>{
+    const localIps=new Set<string>(); for(const list of Object.values(os.networkInterfaces())) for(const a of list??[]) if(a?.address) localIps.add(a.address);
+    const now=Date.now();
+    const pattern='^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\d+$';
+    const users=await ctx.db.db.collection('user').find({uname:{$regex:pattern}}).project({uname:1,loginip:1,loginat:1}).toArray();
+    const byIp=new Map<string,{uid:number;at:number}>();
+    let skipped=0;
+    for(const u of users){
+      const ip=String(u.loginip??'');
+      if(!ip||localIps.has(ip)||ip.endsWith('.1')){skipped++;continue;}
+      if(!registry.has('ip-'+ip.replace(/\./g,'-'))){skipped++;continue;}
+      const at=u.loginat?new Date(u.loginat as any).getTime():0;
+      if(now-at>minutes*60000){skipped++;continue;}
+      const prev=byIp.get(ip);
+      if(prev&&prev.at>=at){skipped++;continue;}
+      byIp.set(ip,{uid:u._id as number,at});
+    }
+    const mappings=validMappings([...byIp.entries()].map(([ip,r])=>({studentId:r.uid,deviceId:'ip-'+ip.replace(/\./g,'-')})),new Set(registry.keys()));
+    return {mappings,skipped};
+  };
   class MonitorHandler extends Handler {
     private examKey=''; private contestId=''; private contestTitle=''; private endAt=new Date();
     @param('tid',Types.ObjectId)
@@ -97,6 +118,19 @@ export async function apply(ctx: Context) {
       const contest=await ContestModel.get(domainId,tid);
       if(!contest || !mayManage({id:this.user._id,edit:this.user.hasPerm(PERM.PERM_EDIT_CONTEST),editSelf:this.user.hasPerm(PERM.PERM_EDIT_CONTEST_SELF)},contest)) throw new ForbiddenError('Contest management required');
       this.contestId=tid.toHexString();this.contestTitle=String(contest.title??'');this.examKey=`${domainId}/${this.contestId}`;this.endAt=contest.endAt;
+    }
+    private async ensureMappings() {
+      const exam = await store.exams.findOne({ _id: this.examKey });
+      if (exam?.mappings?.length) return;
+      const { mappings } = await buildLoginMappings('seat', 120);
+      if (!mappings.length) return;
+      await store.exams.updateOne({ _id: this.examKey }, {
+        $set: {
+          domainId: this.args.domainId, contestId: this.contestId, endAt: this.endAt,
+          mappings, active: false, manual: [],
+        },
+      }, { upsert: true });
+      console.log(`exam-monitor: auto-mapped ${mappings.length} seats for ${this.examKey}`);
     }
     async get() {
       const query=this.request.query;
@@ -115,6 +149,9 @@ export async function apply(ctx: Context) {
         const agentRows=deviceIds.length?await agents.find({_id:{$in:deviceIds}}).toArray():[];
         this.response.body={active:exam?.active??false,mappings:exam?.mappings??[],runtime:(exam as any)?.runtime??[],collectorSeenAt:(exam as any)?.collectorSeenAt??null,successes,rows,agents:agentRows};return;
       }
+      // A brand-new contest has no mapping yet. Fill it from the students' most recent
+      // logins so the operator can go straight to "start" without importing anything.
+      try { await this.ensureMappings(); } catch (e) { console.error('exam-monitor: auto mapping failed', e); }
       this.response.template='exam_monitor.html';this.response.body={monitorTitle:this.contestTitle};
     }
     async post() {
@@ -128,34 +165,20 @@ export async function apply(ctx: Context) {
         if((await store.exams.findOne({_id:this.examKey}))?.active) throw new ForbiddenError('Stop monitoring before changing mappings');
         await store.exams.updateOne({_id:this.examKey},{$set:{domainId:this.args.domainId,contestId:this.contestId,endAt:this.endAt,mappings,active:false,manual:[]}},{upsert:true});
       } else if(action==='importFromLogin') {
-        // Build the mapping from each account's most recent login IP. Works for BYOD
-        // laptops where the MAC address is unknown and IPs are handed out by DHCP.
+        // Same builder as the automatic fill; kept as an explicit action so the operator can
+        // refresh the mapping after students have (re)logged in.
         if((await store.exams.findOne({_id:this.examKey}))?.active) throw new ForbiddenError('Stop monitoring before changing mappings');
         const minutes=Number(body.minutes)>0?Number(body.minutes):120;
-        const prefix=typeof body.prefix==='string'&&body.prefix?body.prefix:'seat';
-        const localIps=new Set<string>(); for(const list of Object.values(os.networkInterfaces())) for(const a of list??[]) if(a?.address) localIps.add(a.address);
-        const now=Date.now();
-        const pattern='^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\d+$';
-        const users=await ctx.db.db.collection('user').find({uname:{$regex:pattern}}).project({uname:1,loginip:1,loginat:1}).toArray();
-        const byIp=new Map<string,{uid:number;at:number}>();
-        let skipped=0;
-        for(const u of users){
-          const ip=String(u.loginip??'');
-          if(!ip||localIps.has(ip)||ip.endsWith('.1')){skipped++;continue;}
-          if(!registry.has('ip-'+ip.replace(/\./g,'-'))){skipped++;continue;}
-          const at=u.loginat?new Date(u.loginat as any).getTime():0;
-          if(now-at>minutes*60000){skipped++;continue;}
-          const prev=byIp.get(ip);
-          if(prev&&prev.at>=at){skipped++;continue;}
-          byIp.set(ip,{uid:u._id as number,at});
-        }
-        const mappings=validMappings([...byIp.entries()].map(([ip,r])=>({studentId:r.uid,deviceId:'ip-'+ip.replace(/\./g,'-')})),new Set(registry.keys()));
+        const prefix=typeof body.prefix=== 'string'&&body.prefix?body.prefix:'seat';
+        const {mappings,skipped}=await buildLoginMappings(prefix,minutes);
         if(!mappings.length) throw new ForbiddenError('No recent logins found - ask students to log in to the OJ first');
         await store.exams.updateOne({_id:this.examKey},{$set:{domainId:this.args.domainId,contestId:this.contestId,endAt:this.endAt,mappings,active:false,manual:[]}},{upsert:true});
         this.response.body={ok:true,imported:mappings.length,skipped,message:'已按登录 IP 导入 '+mappings.length+' 条映射'+(skipped?'（跳过 '+skipped+' 个账号）':'')};
         return;
       } else if(action==='start' || action==='stop') {
-        const exam=await store.exams.findOne({_id:this.examKey});if(!exam?.mappings.length) throw new ForbiddenError('Import mappings first');
+        let exam=await store.exams.findOne({_id:this.examKey});
+        if(action==='start' && !exam?.mappings?.length) { await this.ensureMappings(); exam=await store.exams.findOne({_id:this.examKey}); }
+        if(!exam?.mappings?.length) throw new ForbiddenError('No mapping: ask students to log in to the OJ first, or import the mapping JSON by hand');
         if(action==='start') {
           const used=await store.exams.find({active:true,_id:{$ne:this.examKey},'mappings.deviceId':{$in:exam.mappings.map(m=>m.deviceId)}}).hasNext();
           if(used) throw new ForbiddenError('Device already assigned to active exam');
