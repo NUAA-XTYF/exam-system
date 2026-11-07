@@ -50,3 +50,17 @@
 .em-hitem img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
 .em-hitem div{padding:6px 9px;font-size:12px;color:var(--muted)}
 @media (max-width:640px){.em-head h1{font-size:19px}.em-stats{gap:16px;padding:12px}}
+
+/* 进程面板 */
+.em-card[data-state=warn]{border-color:#f0d9a8}
+.em-proc{font-size:13px}
+.em-proc-meta{color:var(--muted);margin-bottom:10px}
+.em-proc-alert{background:#fdf0f0;border:1px solid #f3cfcb;color:var(--err);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-weight:600}
+.em-proc-list{border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.em-proc-row{display:flex;gap:8px;align-items:baseline;padding:6px 12px;border-bottom:1px solid var(--line);font-size:12px;color:#333}
+.em-proc-row:last-child{border-bottom:0}
+.em-proc-row.bad{background:#fdf7f6;color:var(--err)}
+.em-proc-row b{font-weight:600;min-width:150px}
+.em-proc-mem{margin-left:auto;color:var(--muted);font-size:11px}
+.em-proc-sub{font-weight:600;margin:6px 0}
+.em-proc-events{border:1px solid var(--line);border-radius:8px;overflow:hidden}

@@ -11,6 +11,12 @@ import { Scheduler } from './scheduler/scheduler';
 import { VeyonClient } from './transport/veyon';
 import { mayManage, validMappings } from './handlers/policy';
 export const name = 'hydro-veyon-monitor';
+const DEFAULT_RULES = [
+  'chatgpt','claude','copilot','ollama','lmstudio','lm studio','llama','comfyui','stable diffusion',
+  'wechat','weixin','\\bqq\\b','telegram','discord','whatsapp','skype','微信','企业微信','钉钉','飞书',
+  'teamviewer','anydesk','sunlogin','todesk','rustdesk','parsec','\\bvnc\\b',
+  'virtualbox','vmware','obs64','obs studio',
+];
 const allowInsecureHttp = process.env.EXAM_MONITOR_ALLOW_HTTP === '1';
 export async function apply(ctx: Context) {
   const devices: Device[] = JSON.parse(await readFile(process.env.EXAM_MONITOR_DEVICES ?? 'devices.json','utf8'));
@@ -27,6 +33,28 @@ export async function apply(ctx: Context) {
     if(keyHashes.has(hash)) throw new Error('Each device must have an independent key');keyHashes.add(hash);
   }
   const store = new Store(ctx.db.db, path.resolve(process.env.EXAM_MONITOR_DATA ?? 'data/exam-monitor')); await store.init();
+  // ---- process reporting (student side agent) ----
+  const tokenDevice = new Map<string, string>();
+  try {
+    const tokens = JSON.parse(await readFile(process.env.EXAM_MONITOR_TOKENS ?? '/etc/exam-monitor/tokens.json', 'utf8'));
+    for (const [id, token] of Object.entries(tokens)) {
+      if (registry.has(id) && typeof token === 'string' && token.length >= 16) tokenDevice.set(token, id);
+    }
+  } catch { console.error('Exam monitor: report tokens unavailable, process reporting disabled'); }
+  const agents = ctx.db.db.collection('exam.monitor.agents');
+  const rulesFile = process.env.EXAM_MONITOR_RULES ?? '/etc/exam-monitor/rules.txt';
+  let rulesCache = { at: 0, list: [] as RegExp[] };
+  const loadRules = async () => {
+    if (Date.now() - rulesCache.at < 5000) return rulesCache.list;
+    let lines: string[] = [];
+    try {
+      lines = (await readFile(rulesFile, 'utf8')).split('\n').map((x) => x.trim()).filter((x) => x && !x.startsWith('#'));
+    } catch { lines = DEFAULT_RULES; }
+    const list: RegExp[] = [];
+    for (const line of lines) { try { list.push(new RegExp(line, 'i')); } catch { /* ignore bad pattern */ } }
+    rulesCache = { at: Date.now(), list };
+    return list;
+  };
   const client = new VeyonClient();
   const tasks = new Map<string, { exam: Exam; studentId: number; deviceId: string }>();
   const scheduler = new Scheduler(async (job, signal) => {
@@ -83,7 +111,9 @@ export async function apply(ctx: Context) {
         const exam=await store.exams.findOne({_id:this.examKey});
         const rows=await store.results.aggregate([{$match:{examId:this.examKey}},{$sort:{completedAt:-1}},{$group:{_id:'$studentId',latest:{$first:'$$ROOT'}}},{$project:{'latest.path':0}}]).toArray();
         const successes=await store.results.aggregate([{$match:{examId:this.examKey,path:{$exists:true}}},{$group:{_id:'$studentId',lastSuccessAt:{$max:'$completedAt'}}}]).toArray();
-        this.response.body={active:exam?.active??false,mappings:exam?.mappings??[],runtime:(exam as any)?.runtime??[],collectorSeenAt:(exam as any)?.collectorSeenAt??null,successes,rows};return;
+        const deviceIds=(exam?.mappings??[]).map((m:any)=>m.deviceId);
+        const agentRows=deviceIds.length?await agents.find({_id:{$in:deviceIds}}).toArray():[];
+        this.response.body={active:exam?.active??false,mappings:exam?.mappings??[],runtime:(exam as any)?.runtime??[],collectorSeenAt:(exam as any)?.collectorSeenAt??null,successes,rows,agents:agentRows};return;
       }
       this.response.template='exam_monitor.html';this.response.body={monitorTitle:this.contestTitle};
     }
@@ -146,5 +176,33 @@ export async function apply(ctx: Context) {
       this.response.body={ok:true};
     }
   }
+  class ReportHandler extends Handler {
+    noCheckPermView = true;
+    notUsage = true;
+    async post() {
+      const token = String(this.request.headers['x-exam-token'] ?? '');
+      const deviceId = tokenDevice.get(token);
+      if (!deviceId) throw new ForbiddenError('Invalid report token');
+      const body = (this.request.body ?? {}) as any;
+      const items = (Array.isArray(body.items) ? body.items : []).slice(0, 300).map((i: any) => ({
+        n: String(i?.n ?? '').slice(0, 120), t: String(i?.t ?? '').slice(0, 200), m: Number(i?.m) || 0,
+      })).filter((i: any) => i.n);
+      const rules = await loadRules();
+      const suspects = items.filter((i: any) => rules.some((r) => r.test(i.n) || r.test(i.t))).map((i: any) => ({ n: i.n, t: i.t }));
+      const events = (Array.isArray(body.events) ? body.events : []).slice(0, 50).map((e: any) => ({
+        n: String(e?.n ?? '').slice(0, 120), t: String(e?.t ?? '').slice(0, 200),
+        act: e?.act === 'stop' ? 'stop' : 'start', at: Number(e?.at) || Date.now(),
+      }));
+      await agents.updateOne({ _id: deviceId } as any, {
+        $set: {
+          at: Date.now(), host: String(body.host ?? '').slice(0, 64), user: String(body.user ?? '').slice(0, 64),
+          ip: String(body.ip ?? '').slice(0, 64), items, suspects,
+        },
+        $push: { events: { $each: events, $slice: -30 } } as any,
+      }, { upsert: true });
+      this.response.body = { ok: true };
+    }
+  }
+  ctx.Route('exam_report', '/exam-report', ReportHandler);
   ctx.Route('exam_monitor','/exam-monitor/:tid',MonitorHandler);
 }

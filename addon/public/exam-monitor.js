@@ -18,7 +18,7 @@
     INVALID_JPEG: "\u56FE\u7247\u683C\u5F0F\u9519\u8BEF",
     CAPTURE_FAILED: "\u91C7\u96C6\u5931\u8D25"
   };
-  var ERROR_CODES = Object.keys(LABELS);
+  var AGENT_STALE_MS = 9e4;
   function time(ts) {
     const d = new Date(ts);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
@@ -33,6 +33,9 @@
     message.textContent = text;
     message.className = isError ? "em-msg err" : "em-msg";
   }
+  function imageUrl(id) {
+    return `${location.pathname}?image=${encodeURIComponent(id)}`;
+  }
   async function action(act, extra = {}) {
     const response = await fetch(location.pathname, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: act, ...extra }) });
     if (!response.ok) throw new Error(`\u64CD\u4F5C\u5931\u8D25 (${response.status})`);
@@ -40,15 +43,26 @@
     show(data.message || "\u64CD\u4F5C\u5DF2\u63D0\u4EA4");
     await refresh();
   }
-  function imageUrl(id) {
-    return `${location.pathname}?image=${encodeURIComponent(id)}`;
+  function openModal(title, content) {
+    modalTitle.textContent = title;
+    modalBody.replaceChildren(content);
+    modal.classList.add("open");
   }
-  function renderCard(mapping, row, runtime, okAt) {
+  function agentState(agent) {
+    if (!agent) return { state: "wait", text: "\u91C7\u96C6\u811A\u672C\u672A\u90E8\u7F72" };
+    if (Date.now() - (agent.at || 0) > AGENT_STALE_MS) return { state: "err", text: `\u91C7\u96C6\u5DF2\u505C\u6B62 \xB7 \u6700\u540E ${time(agent.at)}` };
+    const suspects = agent.suspects || [];
+    if (suspects.length) return { state: "err", text: `\u53EF\u7591\uFF1A${suspects.map((s) => s.n).slice(0, 4).join("\u3001")}` };
+    return { state: "ok", text: `\u8FDB\u7A0B\u6B63\u5E38 \xB7 ${time(agent.at)}` };
+  }
+  function renderCard(mapping, row, runtime, okAt, agent) {
     const card = el("article", "em-card");
     const latest = row && row.latest;
     const error = latest && latest.error;
     const hasImage = !!(latest && latest._id && !error);
-    card.dataset.state = hasImage ? "ok" : error ? "err" : "wait";
+    const proc = agentState(agent);
+    const suspectCount = (agent?.suspects || []).length;
+    card.dataset.state = hasImage ? suspectCount ? "warn" : "ok" : error ? "err" : "wait";
     const shot = el("a", hasImage ? "em-shot" : "em-shot empty");
     if (hasImage) {
       shot.setAttribute("href", imageUrl(latest._id));
@@ -61,6 +75,10 @@
       shot.append(img);
     } else {
       shot.dataset.text = error ? LABELS[error] ?? error : "\u7B49\u5F85\u9996\u6B21\u753B\u9762";
+    }
+    if (suspectCount) {
+      const badge = el("span", "em-badge", `\u53EF\u7591 ${suspectCount}`);
+      shot.append(badge);
     }
     const body = el("div", "em-body");
     const idLine = el("div", "em-id");
@@ -84,12 +102,18 @@
     else if (runtime?.running) queue = "\u6B63\u5728\u91C7\u96C6";
     else queue = "\u7B49\u5F85\u4E0B\u6B21\u68C0\u6D4B";
     body.append(el("div", "em-line", `${queue}${okAt ? ` \xB7 \u6700\u8FD1\u6210\u529F ${time(okAt)}` : ""}`));
+    body.append(el("div", `em-line ${proc.state}`, proc.text));
     const mini = el("div", "em-mini");
     const shotBtn = el("button", "", "\u62BD\u67E5");
     shotBtn.onclick = () => void action("capture", { studentId: mapping.studentId }).catch(showError);
     const historyBtn = el("button", "", "\u5386\u53F2");
     historyBtn.onclick = () => void loadHistory(mapping.studentId).catch(showError);
     mini.append(shotBtn, historyBtn);
+    if (agent) {
+      const procBtn = el("button", "", "\u8FDB\u7A0B");
+      procBtn.onclick = () => showProcesses(mapping, agent);
+      mini.append(procBtn);
+    }
     body.append(mini);
     card.append(shot, body);
     return card;
@@ -97,15 +121,18 @@
   function renderStats(data) {
     const rows = data.rows || [];
     const byId = new Map(rows.map((r) => [r._id, r.latest]));
-    let ok = 0, err = 0, wait = 0;
+    const agents = new Map((data.agents || []).map((a) => [a._id, a]));
+    let ok = 0, err = 0, wait = 0, suspect = 0, stale = 0;
     for (const m of data.mappings) {
       const latest = byId.get(m.studentId);
-      if (!latest) {
-        wait++;
-        continue;
-      }
-      if (latest.error) err++;
+      if (!latest) wait++;
+      else if (latest.error) err++;
       else ok++;
+      const agent = agents.get(m.deviceId);
+      if (agent) {
+        if ((agent.suspects || []).length) suspect++;
+        if (Date.now() - (agent.at || 0) > AGENT_STALE_MS) stale++;
+      }
     }
     statsHost.replaceChildren();
     const add = (cls, value, label) => {
@@ -117,37 +144,69 @@
     add("ok", String(ok), "\u753B\u9762\u6B63\u5E38");
     add("err", String(err), "\u6709\u5F02\u5E38");
     add("wait", String(wait), "\u7B49\u5F85\u9996\u6B21");
+    if (suspect) add("err", String(suspect), "\u53EF\u7591\u7A0B\u5E8F");
+    if (stale) add("wait", String(stale), "\u91C7\u96C6\u4E2D\u65AD");
     const live = el("div", "em-live");
-    const stale = !data.collectorSeenAt || Date.now() - data.collectorSeenAt > 1e4;
-    live.append(el("span", `em-dot ${data.active ? stale ? "off" : "on" : ""}`));
-    live.append(document.createTextNode(data.active ? stale ? "\u91C7\u96C6\u8FDB\u7A0B\u65E0\u54CD\u5E94" : "\u91C7\u96C6\u8FDB\u7A0B\u6B63\u5E38" : "\u672A\u5F00\u59CB\u76D1\u8003"));
+    const collectorStale = !data.collectorSeenAt || Date.now() - data.collectorSeenAt > 1e4;
+    live.append(el("span", `em-dot ${data.active ? collectorStale ? "off" : "on" : ""}`));
+    live.append(document.createTextNode(data.active ? collectorStale ? "\u91C7\u96C6\u8FDB\u7A0B\u65E0\u54CD\u5E94" : "\u91C7\u96C6\u8FDB\u7A0B\u6B63\u5E38" : "\u672A\u5F00\u59CB\u76D1\u8003"));
     statsHost.append(live);
   }
   async function loadHistory(studentId) {
     const response = await fetch(`${location.pathname}?history=${studentId}`);
     if (!response.ok) throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u5386\u53F2\u753B\u9762");
     const { rows } = await response.json();
-    modalTitle.textContent = `\u5B66\u751F ${studentId} \xB7 \u5386\u53F2\u753B\u9762\uFF08${rows.length} \u5F20\uFF09`;
-    modalBody.replaceChildren();
-    if (!rows.length) {
-      modalBody.append(el("div", "em-empty", "\u8FD8\u6CA1\u6709\u5386\u53F2\u753B\u9762"));
-    } else {
-      const gridBox = el("div", "em-hgrid");
-      for (const row of rows) {
-        const item = el("a", "em-hitem");
-        item.href = imageUrl(row._id);
-        item.target = "_blank";
-        const img = el("img");
-        img.loading = "lazy";
-        img.src = imageUrl(row._id);
-        img.alt = "";
-        const caption = el("div", "", `${time(row.completedAt)} \xB7 ${Math.round((row.bytes || 0) / 1024)} KB`);
-        item.append(img, caption);
-        gridBox.append(item);
-      }
-      modalBody.append(gridBox);
+    const box = el("div", "em-hgrid");
+    if (!rows.length) box.append(el("div", "em-empty", "\u8FD8\u6CA1\u6709\u5386\u53F2\u753B\u9762"));
+    for (const row of rows) {
+      const item = el("a", "em-hitem");
+      item.href = imageUrl(row._id);
+      item.target = "_blank";
+      const img = el("img");
+      img.loading = "lazy";
+      img.src = imageUrl(row._id);
+      img.alt = "";
+      item.append(img, el("div", "", `${time(row.completedAt)} \xB7 ${Math.round((row.bytes || 0) / 1024)} KB`));
+      box.append(item);
     }
-    modal.classList.add("open");
+    openModal(`\u5B66\u751F ${studentId} \xB7 \u5386\u53F2\u753B\u9762\uFF08${rows.length} \u5F20\uFF09`, box);
+  }
+  function showProcesses(mapping, agent) {
+    const wrap = el("div", "em-proc");
+    const meta = el(
+      "div",
+      "em-proc-meta",
+      `\u4E3B\u673A ${agent.host || "-"} \xB7 \u7528\u6237 ${agent.user || "-"} \xB7 \u6700\u540E\u4E0A\u62A5 ${time(agent.at)} \xB7 \u5171 ${(agent.items || []).length} \u4E2A\u7A97\u53E3\u8FDB\u7A0B`
+    );
+    wrap.append(meta);
+    const suspects = agent.suspects || [];
+    if (suspects.length) {
+      const box = el("div", "em-proc-alert", `\u53EF\u7591\u8FDB\u7A0B\uFF1A${suspects.map((s) => `${s.n}${s.t ? `\uFF08${s.t}\uFF09` : ""}`).join("\u3001")}`);
+      wrap.append(box);
+    }
+    const list = el("div", "em-proc-list");
+    const items = [...agent.items || []].sort((a, b) => (suspects.some((s) => s.n === b.n) ? 1 : 0) - (suspects.some((s) => s.n === a.n) ? 1 : 0));
+    for (const item of items) {
+      const line = el("div", suspects.some((s) => s.n === item.n) ? "em-proc-row bad" : "em-proc-row");
+      line.append(el("b", "", item.n), document.createTextNode(item.t ? ` ${item.t}` : ""), el("span", "em-proc-mem", `${Math.round((item.m || 0) / 1024)} MB`));
+      list.append(line);
+    }
+    if (!items.length) list.append(el("div", "em-empty", "\u6CA1\u6709\u5E26\u7A97\u53E3\u7684\u8FDB\u7A0B"));
+    wrap.append(list);
+    const events = (agent.events || []).slice(-12).reverse();
+    if (events.length) {
+      wrap.append(el("div", "em-proc-sub", "\u6700\u8FD1\u4E8B\u4EF6"));
+      const ev = el("div", "em-proc-events");
+      for (const e of events) {
+        ev.append(el(
+          "div",
+          e.act === "stop" ? "em-proc-row" : "em-proc-row bad",
+          `${time(e.at)} ${e.act === "stop" ? "\u5173\u95ED" : "\u542F\u52A8"} ${e.n}${e.t ? ` \xB7 ${e.t}` : ""}`
+        ));
+      }
+      wrap.append(ev);
+    }
+    openModal(`\u5B66\u751F ${mapping.studentId} \xB7 \u8FDB\u7A0B`, wrap);
   }
   async function refresh() {
     const response = await fetch(`${location.pathname}?status=1`);
@@ -155,6 +214,7 @@
     const data = await response.json();
     renderStats(data);
     const okAt = new Map((data.successes || []).map((s) => [s._id, s.lastSuccessAt]));
+    const agents = new Map((data.agents || []).map((a) => [a._id, a]));
     grid.replaceChildren();
     if (!data.mappings.length) {
       grid.append(el("div", "em-empty", "\u8FD8\u6CA1\u6709\u6620\u5C04\uFF1A\u8BA9\u5B66\u751F\u7684 seat \u8D26\u53F7\u767B\u5F55\u4E00\u6B21 OJ\uFF0C\u7136\u540E\u70B9\u300C\u6309\u767B\u5F55 IP \u751F\u6210\u6620\u5C04\u300D"));
@@ -163,7 +223,7 @@
     for (const mapping of sorted) {
       const row = (data.rows || []).find((r) => r._id === mapping.studentId);
       const runtime = (data.runtime || []).find((r) => r.studentId === mapping.studentId);
-      grid.append(renderCard(mapping, row, runtime, okAt.get(mapping.studentId)));
+      grid.append(renderCard(mapping, row, runtime, okAt.get(mapping.studentId), agents.get(mapping.deviceId)));
     }
     if (!data.active) show("\u5F53\u524D\u672A\u5728\u76D1\u8003 \u2014 \u70B9\u300C\u5F00\u59CB\u76D1\u8003\u300D\u5F00\u59CB\u91C7\u96C6");
     else if (data.collectorSeenAt && Date.now() - data.collectorSeenAt > 1e4) show("\u91C7\u96C6\u8FDB\u7A0B\u672A\u66F4\u65B0\u72B6\u6001\uFF0C\u8BF7\u68C0\u67E5\u670D\u52A1", true);
