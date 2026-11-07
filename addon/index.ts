@@ -185,13 +185,11 @@ export async function apply(ctx: Context) {
       if (!deviceId) throw new ForbiddenError('Invalid report token');
       const body = (this.request.body ?? {}) as any;
       const items = (Array.isArray(body.items) ? body.items : []).slice(0, 300).map((i: any) => ({
-        n: String(i?.n ?? '').slice(0, 120), t: String(i?.t ?? '').slice(0, 200), m: Number(i?.m) || 0,
+        n: String(i?.n ?? '').slice(0, 120), t: String(i?.t ?? '').slice(0, 200), m: Number(i?.m) || 0, p: Number(i?.p) || 0,
       })).filter((i: any) => i.n);
       const rules = await loadRules();
-      const seen = new Set<string>();
       const suspects = items.filter((i: any) => rules.some((r) => r.test(i.n) || r.test(i.t)))
-        .filter((i: any) => (seen.has(i.n) ? false : (seen.add(i.n), true)))
-        .map((i: any) => ({ n: i.n, t: i.t }));
+        .map((i: any) => ({ n: i.n, t: i.t, p: i.p }));
       const events = (Array.isArray(body.events) ? body.events : []).slice(0, 50).map((e: any) => ({
         n: String(e?.n ?? '').slice(0, 120), t: String(e?.t ?? '').slice(0, 200),
         act: e?.act === 'stop' ? 'stop' : 'start', at: Number(e?.at) || Date.now(),

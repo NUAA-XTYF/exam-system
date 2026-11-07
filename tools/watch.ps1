@@ -58,7 +58,7 @@ function Get-WindowProcesses {
         try {
             $title = $p.MainWindowTitle
             if ([string]::IsNullOrWhiteSpace($title)) { continue }
-            $list += [pscustomobject]@{ Id = $p.Id; Name = $p.ProcessName + '.exe'; Title = $title; Mb = [int]($p.WorkingSet64 / 1MB) }
+            $list += [pscustomobject]@{ Id = $p.Id; Name = $p.ProcessName + '.exe'; Title = $title; Mb = [int]($p.WorkingSet64 / 1MB); Pid = $p.Id }
         }
         catch { }
     }
@@ -115,7 +115,7 @@ while ($true) {
             host = $hostName
             user = $userName
             ip = $ip
-            items = @($procs | ForEach-Object { @{ n = $_.Name; t = $_.Title; m = $_.Mb } })
+            items = @($procs | ForEach-Object { @{ n = $_.Name; t = $_.Title; m = $_.Mb; p = $_.Pid } })
             events = @($pending.ToArray())
         }
         $ok = $false

@@ -43,11 +43,24 @@ function openModal(title: string, content: HTMLElement) {
   modal.classList.add('open');
 }
 
+function groupSuspects(list: any[]): { n: string; count: number }[] {
+  const map = new Map<string, { n: string; count: number }>();
+  for (const s of list || []) {
+    const entry = map.get(s.n) || { n: s.n, count: 0 };
+    entry.count++;
+    map.set(s.n, entry);
+  }
+  return [...map.values()].sort((a, b) => b.count - a.count);
+}
+function groupText(list: any[], limit = 4): string {
+  return groupSuspects(list).slice(0, limit).map((g) => (g.count > 1 ? `${g.n}×${g.count}` : g.n)).join('、');
+}
+
 function agentState(agent: any): { state: string; text: string } {
   if (!agent) return { state: 'wait', text: '采集脚本未部署' };
   if (Date.now() - (agent.at || 0) > AGENT_STALE_MS) return { state: 'err', text: `采集已停止 · 最后 ${time(agent.at)}` };
   const suspects: any[] = agent.suspects || [];
-  if (suspects.length) return { state: 'err', text: `可疑：${suspects.map((s) => s.n).slice(0, 4).join('、')}` };
+  if (suspects.length) return { state: 'err', text: `可疑：${groupText(suspects)}` };
   return { state: 'ok', text: `进程正常 · ${time(agent.at)}` };
 }
 
@@ -172,15 +185,16 @@ function showProcesses(mapping: any, agent: any) {
 
   const suspects: any[] = agent.suspects || [];
   if (suspects.length) {
-    const box = el('div', 'em-proc-alert', `可疑进程：${suspects.map((s) => `${s.n}${s.t ? `（${s.t}）` : ''}`).join('、')}`);
-    wrap.append(box);
+    const names = groupSuspects(suspects).map((g) => `${g.n}${g.count > 1 ? `×${g.count}` : ''}`).join('、');
+    wrap.append(el('div', 'em-proc-alert', `可疑进程 ${suspects.length} 个：${names}`));
   }
 
   const list = el('div', 'em-proc-list');
   const items = [...(agent.items || [])].sort((a: any, b: any) => (suspects.some((s) => s.n === b.n) ? 1 : 0) - (suspects.some((s) => s.n === a.n) ? 1 : 0));
   for (const item of items) {
     const line = el('div', suspects.some((s) => s.n === item.n) ? 'em-proc-row bad' : 'em-proc-row');
-    line.append(el('b', '', item.n), document.createTextNode(item.t ? ` ${item.t}` : ''), el('span', 'em-proc-mem', `${Math.round((item.m || 0) / 1024)} MB`));
+    const pid = item.p ? ` (pid ${item.p})` : '';
+    line.append(el('b', '', item.n), document.createTextNode(`${pid}${item.t ? ` · ${item.t}` : ''}`), el('span', 'em-proc-mem', `${Math.round((item.m || 0) / 1024)} MB`));
     list.append(line);
   }
   if (!items.length) list.append(el('div', 'em-empty', '没有带窗口的进程'));

@@ -48,11 +48,23 @@
     modalBody.replaceChildren(content);
     modal.classList.add("open");
   }
+  function groupSuspects(list) {
+    const map = /* @__PURE__ */ new Map();
+    for (const s of list || []) {
+      const entry = map.get(s.n) || { n: s.n, count: 0 };
+      entry.count++;
+      map.set(s.n, entry);
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count);
+  }
+  function groupText(list, limit = 4) {
+    return groupSuspects(list).slice(0, limit).map((g) => g.count > 1 ? `${g.n}\xD7${g.count}` : g.n).join("\u3001");
+  }
   function agentState(agent) {
     if (!agent) return { state: "wait", text: "\u91C7\u96C6\u811A\u672C\u672A\u90E8\u7F72" };
     if (Date.now() - (agent.at || 0) > AGENT_STALE_MS) return { state: "err", text: `\u91C7\u96C6\u5DF2\u505C\u6B62 \xB7 \u6700\u540E ${time(agent.at)}` };
     const suspects = agent.suspects || [];
-    if (suspects.length) return { state: "err", text: `\u53EF\u7591\uFF1A${suspects.map((s) => s.n).slice(0, 4).join("\u3001")}` };
+    if (suspects.length) return { state: "err", text: `\u53EF\u7591\uFF1A${groupText(suspects)}` };
     return { state: "ok", text: `\u8FDB\u7A0B\u6B63\u5E38 \xB7 ${time(agent.at)}` };
   }
   function renderCard(mapping, row, runtime, okAt, agent) {
@@ -181,14 +193,15 @@
     wrap.append(meta);
     const suspects = agent.suspects || [];
     if (suspects.length) {
-      const box = el("div", "em-proc-alert", `\u53EF\u7591\u8FDB\u7A0B\uFF1A${suspects.map((s) => `${s.n}${s.t ? `\uFF08${s.t}\uFF09` : ""}`).join("\u3001")}`);
-      wrap.append(box);
+      const names = groupSuspects(suspects).map((g) => `${g.n}${g.count > 1 ? `\xD7${g.count}` : ""}`).join("\u3001");
+      wrap.append(el("div", "em-proc-alert", `\u53EF\u7591\u8FDB\u7A0B ${suspects.length} \u4E2A\uFF1A${names}`));
     }
     const list = el("div", "em-proc-list");
     const items = [...agent.items || []].sort((a, b) => (suspects.some((s) => s.n === b.n) ? 1 : 0) - (suspects.some((s) => s.n === a.n) ? 1 : 0));
     for (const item of items) {
       const line = el("div", suspects.some((s) => s.n === item.n) ? "em-proc-row bad" : "em-proc-row");
-      line.append(el("b", "", item.n), document.createTextNode(item.t ? ` ${item.t}` : ""), el("span", "em-proc-mem", `${Math.round((item.m || 0) / 1024)} MB`));
+      const pid = item.p ? ` (pid ${item.p})` : "";
+      line.append(el("b", "", item.n), document.createTextNode(`${pid}${item.t ? ` \xB7 ${item.t}` : ""}`), el("span", "em-proc-mem", `${Math.round((item.m || 0) / 1024)} MB`));
       list.append(line);
     }
     if (!items.length) list.append(el("div", "em-empty", "\u6CA1\u6709\u5E26\u7A97\u53E3\u7684\u8FDB\u7A0B"));
