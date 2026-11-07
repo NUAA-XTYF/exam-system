@@ -1,3 +1,4 @@
+import http from 'node:http';
 import https from 'node:https';
 import { IncomingMessage } from 'node:http';
 import { readFile, mkdir, open, rename, rm } from 'node:fs/promises';
@@ -13,12 +14,15 @@ export class VeyonClient {
     const result: CaptureResult = { bytes: 0, startedAt: Date.now(), completedAt: 0, waitMs: 0 };
     const signal = AbortSignal.any([external, AbortSignal.timeout(options.timeoutMs ?? defaults.timeoutMs)]);
     const origin = new URL(device.origin);
-    if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('Invalid HTTPS origin');
+    const isHttps = origin.protocol === 'https:';
+    const allowHttp = process.env.EXAM_MONITOR_ALLOW_HTTP === '1';
+    if ((!isHttps && !(allowHttp && origin.protocol === 'http:')) || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('Invalid device origin');
     let uid: string | undefined; let partial: string | undefined;
-    const ca = await readFile(device.caFile);
+    const ca = isHttps ? await readFile(device.caFile) : undefined;
     const request = (method: string, route: string, body: unknown, requestSignal: AbortSignal) => new Promise<IncomingMessage>((resolve, reject) => {
       const data = body === undefined ? undefined : JSON.stringify(body);
-      const req = https.request(new URL(route, origin), { method, ca, rejectUnauthorized: true, signal: requestSignal, headers: { ...(uid ? { 'Connection-Uid': uid } : {}), ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}) } }, resolve);
+      const transport = isHttps ? https : http;
+      const req = transport.request(new URL(route, origin), { method, ...(isHttps ? { ca, rejectUnauthorized: true } : {}), signal: requestSignal, headers: { ...(uid ? { 'Connection-Uid': uid } : {}), ...(data ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } : {}) } }, resolve);
       req.on('error', reject); req.end(data);
     });
     const json = async (method: string, body: unknown, requestSignal: AbortSignal) => {

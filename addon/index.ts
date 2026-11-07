@@ -10,6 +10,7 @@ import { Scheduler } from './scheduler/scheduler';
 import { VeyonClient } from './transport/veyon';
 import { mayManage, validMappings } from './handlers/policy';
 export const name = 'hydro-veyon-monitor';
+const allowInsecureHttp = process.env.EXAM_MONITOR_ALLOW_HTTP === '1';
 export async function apply(ctx: Context) {
   const devices: Device[] = JSON.parse(await readFile(process.env.EXAM_MONITOR_DEVICES ?? 'devices.json','utf8'));
   const registry = new Map(devices.map(d => [d.id,d]));
@@ -17,7 +18,9 @@ export async function apply(ctx: Context) {
   const keyFiles = new Set<string>();
   const keyHashes = new Set<string>();
   for (const d of devices) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(d.id) || new URL(d.origin).protocol !== 'https:' || keyFiles.has(path.resolve(d.keyFile))) throw new Error('Invalid device or shared key file');
+    const proto = new URL(d.origin).protocol;
+    const protoOk = proto === 'https:' || (allowInsecureHttp && proto === 'http:');
+    if (!/^[a-zA-Z0-9_-]+$/.test(d.id) || !protoOk || keyFiles.has(path.resolve(d.keyFile))) throw new Error('Invalid device or shared key file');
     keyFiles.add(path.resolve(d.keyFile));
     const hash=createHash('sha256').update(await readFile(d.keyFile)).digest('hex');
     if(keyHashes.has(hash)) throw new Error('Each device must have an independent key');keyHashes.add(hash);
