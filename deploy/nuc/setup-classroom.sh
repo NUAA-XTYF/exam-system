@@ -125,6 +125,13 @@ fi
 if [[ -f /opt/exam-system/tools/probe-device.sh ]]; then
   install -m 755 /opt/exam-system/tools/probe-device.sh "$OUT/probe-device.sh"
 fi
+if [[ -f /opt/exam-system/tools/watch.ps1 ]]; then
+  install -m 644 /opt/exam-system/tools/watch.ps1 "$OUT/watch.ps1"
+fi
+# 进程上报 token：学生机装机时下载 by-ip/<IP>/token，必须和凭据一起发布
+if [[ -f /opt/exam-system/tools/make-report-tokens.sh ]]; then
+  /opt/exam-system/tools/make-report-tokens.sh || echo "[!] token generation failed; run make-report-tokens.sh by hand" >&2
+fi
 
 cat <<EOF
 
