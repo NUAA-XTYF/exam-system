@@ -1,0 +1,52 @@
+/* exam-monitor: 监考页样式（本机改动，见交接文档 14 节） */
+.em,.em-modal{--ok:#0f7b3d;--err:#c0392b;--warn:#b26a00;--line:#e4e7ec;--muted:#7a8290;--bg:#f7f8fa}
+.em *,.em-modal *{box-sizing:border-box}
+.em-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:14px}
+.em-head h1{margin:0;font-size:22px;line-height:1.3}
+.em-sub{color:var(--muted);font-size:13px}
+.em-spacer{flex:1 1 auto}
+.em-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.em-actions button{padding:6px 14px;font-size:13px}
+.em-actions label{font-size:13px;color:var(--muted);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.em-msg{min-height:20px;font-size:13px;color:var(--muted);margin:0 0 10px}
+.em-msg.err{color:var(--err)}
+.em-stats{display:flex;flex-wrap:wrap;gap:26px;align-items:baseline;padding:14px 18px;background:var(--bg);border:1px solid var(--line);border-radius:12px;margin-bottom:16px}
+.em-stat{display:flex;align-items:baseline;gap:6px;font-size:13px;color:var(--muted)}
+.em-stat b{font-size:22px;font-weight:600;color:#1d2129;line-height:1}
+.em-stat.ok b{color:var(--ok)}.em-stat.err b{color:var(--err)}.em-stat.wait b{color:var(--warn)}
+.em-live{margin-left:auto;font-size:12px;color:var(--muted)}
+.em-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#bbb;margin-right:5px;vertical-align:middle}
+.em-dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(15,123,61,.15)}
+.em-dot.off{background:var(--err)}
+.em-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:14px}
+.em-card{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;transition:box-shadow .15s,border-color .15s}
+.em-card:hover{box-shadow:0 4px 16px rgba(16,24,40,.10);border-color:#cfd6df}
+.em-shot{display:block;position:relative;aspect-ratio:16/10;background:#0f1115;cursor:zoom-in;overflow:hidden}
+.em-shot img{width:100%;height:100%;object-fit:cover;display:block}
+.em-shot.empty{background:#f2f3f5;cursor:default}
+.em-shot.empty::after{content:attr(data-text);position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#98a1ad;font-size:13px;text-align:center;padding:0 12px}
+.em-shot .em-badge{position:absolute;left:8px;top:8px;padding:2px 8px;border-radius:999px;font-size:11px;background:rgba(0,0,0,.66);color:#fff}
+.em-body{padding:9px 11px 11px;display:flex;flex-direction:column;gap:4px}
+.em-id{font-size:14px;font-weight:600;color:#1d2129;display:flex;align-items:baseline;gap:8px}
+.em-ip{font-size:12px;font-weight:400;color:var(--muted)}
+.em-line{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.em-line.ok{color:var(--ok)}.em-line.err{color:var(--err)}.em-line.wait{color:var(--warn)}
+.em-mini{display:flex;gap:6px;margin-top:4px}
+.em-mini button{padding:3px 10px;font-size:12px;line-height:1.4}
+.em-empty{grid-column:1/-1;padding:48px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+.em-details{margin:0 0 14px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.em-details summary{padding:10px 14px;cursor:pointer;font-size:13px;color:var(--muted)}
+.em-details .em-details-body{padding:0 14px 14px;display:flex;gap:10px;flex-wrap:wrap}
+.em-details textarea{flex:1 1 420px;min-height:72px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.em-modal{position:fixed;inset:0;background:rgba(12,16,22,.62);display:none;align-items:center;justify-content:center;padding:24px;z-index:9999}
+.em-modal.open{display:flex}
+.em-modal-box{background:#fff;border-radius:14px;width:100%;max-width:1080px;max-height:86vh;display:flex;flex-direction:column;overflow:hidden}
+.em-modal-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.em-modal-head h2{margin:0;font-size:16px}
+.em-modal-head .em-close{margin-left:auto;background:none;border:0;font-size:20px;cursor:pointer;color:var(--muted);line-height:1}
+.em-modal-body{padding:16px 18px;overflow:auto}
+.em-hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.em-hitem{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.em-hitem img{width:100%;aspect-ratio:16/10;object-fit:cover;display:block}
+.em-hitem div{padding:6px 9px;font-size:12px;color:var(--muted)}
+@media (max-width:640px){.em-head h1{font-size:19px}.em-stats{gap:16px;padding:12px}}

@@ -1,4 +1,4 @@
-import { Context, Handler, ContestModel, PERM, ForbiddenError, param, Types } from 'hydrooj';
+import { Context, Handler, ContestModel, PERM, ForbiddenError, ValidationError, param, Types } from 'hydrooj';
 import { ObjectId } from 'mongodb';
 import { readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
@@ -63,12 +63,12 @@ export async function apply(ctx: Context) {
     ctx.effect(()=>()=>{clearInterval(tick);clearInterval(poll);clearInterval(cleanup);scheduler.stop();});
   }
   class MonitorHandler extends Handler {
-    private examKey=''; private contestId=''; private endAt=new Date();
+    private examKey=''; private contestId=''; private contestTitle=''; private endAt=new Date();
     @param('tid',Types.ObjectId)
     async prepare(domainId:string,tid:ObjectId) {
       const contest=await ContestModel.get(domainId,tid);
       if(!contest || !mayManage({id:this.user._id,edit:this.user.hasPerm(PERM.PERM_EDIT_CONTEST),editSelf:this.user.hasPerm(PERM.PERM_EDIT_CONTEST_SELF)},contest)) throw new ForbiddenError('Contest management required');
-      this.contestId=tid.toHexString();this.examKey=`${domainId}/${this.contestId}`;this.endAt=contest.endAt;
+      this.contestId=tid.toHexString();this.contestTitle=String(contest.title??'');this.examKey=`${domainId}/${this.contestId}`;this.endAt=contest.endAt;
     }
     async get() {
       const query=this.request.query;
@@ -85,12 +85,16 @@ export async function apply(ctx: Context) {
         const successes=await store.results.aggregate([{$match:{examId:this.examKey,path:{$exists:true}}},{$group:{_id:'$studentId',lastSuccessAt:{$max:'$completedAt'}}}]).toArray();
         this.response.body={active:exam?.active??false,mappings:exam?.mappings??[],runtime:(exam as any)?.runtime??[],collectorSeenAt:(exam as any)?.collectorSeenAt??null,successes,rows};return;
       }
-      this.response.template='exam_monitor.html';this.response.body={};
+      this.response.template='exam_monitor.html';this.response.body={monitorTitle:this.contestTitle};
     }
     async post() {
       const body=this.request.body; const action=body.action;
       if(action==='import') {
-        const mappings=validMappings(typeof body.mappings==='string'?JSON.parse(body.mappings):body.mappings,new Set(registry.keys()));
+        let parsed: unknown;
+        try { parsed=typeof body.mappings==='string'?JSON.parse(body.mappings):body.mappings; }
+        catch { throw new ValidationError('mappings'); }
+        if(!Array.isArray(parsed)) throw new ValidationError('mappings');
+        const mappings=validMappings(parsed as any,new Set(registry.keys()));
         if((await store.exams.findOne({_id:this.examKey}))?.active) throw new ForbiddenError('Stop monitoring before changing mappings');
         await store.exams.updateOne({_id:this.examKey},{$set:{domainId:this.args.domainId,contestId:this.contestId,endAt:this.endAt,mappings,active:false,manual:[]}},{upsert:true});
       } else if(action==='importFromLogin') {

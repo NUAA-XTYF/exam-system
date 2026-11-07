@@ -1,10 +1,36 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<section class="section"><div class="section__body">
-<h1>考试监考</h1><p>随机计划间隔 30～90 秒；限流时可能延迟。下方画面每 15 秒自动更新为最新一张，点「抽查」可立即补拍一张。</p>
-<textarea id="mapping" placeholder='[{"studentId":2,"deviceId":"seat01"}]'></textarea>
-<button data-action="import">导入映射</button><button data-action="importFromLogin">按登录 IP 生成映射</button><button data-action="start">开始监考</button><label style="margin:0 12px"><input type="checkbox" id="autostop" checked> 到比赛结束时间自动停止</label><button data-action="stop">停止监考</button>
-<p id="message" role="status"></p><div id="monitor-list"></div><div id="monitor-history"></div>
-<script src="/exam-monitor.js?v=4" defer></script>
-</div></section>
+<link rel="stylesheet" href="/exam-monitor.css?v=5">
+<section class="section em">
+  <div class="em-head">
+    <div>
+      <h1>考试监考</h1>
+      <div class="em-sub">{{ monitorTitle }}</div>
+    </div>
+    <div class="em-spacer"></div>
+    <div class="em-actions">
+      <button data-action="start" class="primary">开始监考</button>
+      <label><input type="checkbox" id="autostop" checked> 到比赛结束时间自动停止</label>
+      <button data-action="stop">停止监考</button>
+      <button data-action="importFromLogin">按登录 IP 生成映射</button>
+    </div>
+  </div>
+  <p class="em-msg" id="em-msg" role="status"></p>
+  <div class="em-stats" id="em-stats"></div>
+  <details class="em-details">
+    <summary>手工导入映射（粘贴 JSON）</summary>
+    <div class="em-details-body">
+      <textarea id="mapping" placeholder='[{"studentId":101,"deviceId":"ip-192-168-3-101"}]'></textarea>
+      <button data-action="import">导入映射</button>
+    </div>
+  </details>
+  <div class="em-grid" id="em-grid"></div>
+</section>
+<div class="em-modal" id="em-modal">
+  <div class="em-modal-box">
+    <div class="em-modal-head"><h2 id="em-modal-title">历史画面</h2><button class="em-close" id="em-modal-close" title="关闭">×</button></div>
+    <div class="em-modal-body" id="em-modal-body"></div>
+  </div>
+</div>
+<script src="/exam-monitor.js?v=5" defer></script>
 {% endblock %}
