@@ -118,7 +118,7 @@ function renderCard(mapping: any, row: any, runtime: any, okAt: number | undefin
   mini.append(shotBtn, historyBtn, recordBtn);
   if (agent) {
     const procBtn = el('button', '', '进程');
-    procBtn.onclick = () => showProcesses(mapping, agent);
+    procBtn.onclick = () => void loadProcesses(mapping.studentId).catch(showError);
     mini.append(procBtn);
   }
   body.append(mini);
@@ -177,6 +177,14 @@ async function loadHistory(studentId: number) {
     box.append(item);
   }
   openModal(`学生 ${studentId} · 历史画面（${rows.length} 张）`, box);
+}
+
+async function loadProcesses(studentId: number) {
+  const response = await fetch(`${location.pathname}?processes=${studentId}`);
+  if (!response.ok) throw new Error('无法读取进程列表');
+  const { agent } = await response.json();
+  if (!agent) { show('这台机器还没有上报过', true); return; }
+  showProcesses({ studentId }, agent);
 }
 
 function showProcesses(mapping: any, agent: any) {
@@ -284,4 +292,4 @@ modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.classList.remove('open'); });
 
 void refresh().catch(showError);
-setInterval(() => void refresh().catch(showError), 15000);
+setInterval(() => void refresh().catch(showError), 8000);

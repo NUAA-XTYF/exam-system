@@ -125,7 +125,7 @@
     mini.append(shotBtn, historyBtn, recordBtn);
     if (agent) {
       const procBtn = el("button", "", "\u8FDB\u7A0B");
-      procBtn.onclick = () => showProcesses(mapping, agent);
+      procBtn.onclick = () => void loadProcesses(mapping.studentId).catch(showError);
       mini.append(procBtn);
     }
     body.append(mini);
@@ -184,6 +184,16 @@
       box.append(item);
     }
     openModal(`\u5B66\u751F ${studentId} \xB7 \u5386\u53F2\u753B\u9762\uFF08${rows.length} \u5F20\uFF09`, box);
+  }
+  async function loadProcesses(studentId) {
+    const response = await fetch(`${location.pathname}?processes=${studentId}`);
+    if (!response.ok) throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u8FDB\u7A0B\u5217\u8868");
+    const { agent } = await response.json();
+    if (!agent) {
+      show("\u8FD9\u53F0\u673A\u5668\u8FD8\u6CA1\u6709\u4E0A\u62A5\u8FC7", true);
+      return;
+    }
+    showProcesses({ studentId }, agent);
   }
   function showProcesses(mapping, agent) {
     const wrap = el("div", "em-proc");
@@ -290,5 +300,5 @@
     if (e.key === "Escape") modal.classList.remove("open");
   });
   void refresh().catch(showError);
-  setInterval(() => void refresh().catch(showError), 15e3);
+  setInterval(() => void refresh().catch(showError), 8e3);
 })();

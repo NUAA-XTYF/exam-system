@@ -155,6 +155,12 @@ export async function apply(ctx: Context) {
         this.response.type='image/jpeg';this.response.body=createReadStream(row.path);return;
       }
       if(query.history) { const studentId=Number(query.history);const rows=await store.results.find({examId:this.examKey,studentId,path:{$exists:true}}).sort({completedAt:-1}).limit(100).project({path:0}).toArray();this.response.body={rows};return; }
+      if(query.processes) {
+        const sid=Number(query.processes);
+        const mapping=(await store.exams.findOne({_id:this.examKey}))?.mappings?.find((m:any)=>m.studentId===sid);
+        const doc=mapping?await agents.findOne({_id:mapping.deviceId}):null;
+        this.response.body={agent:doc};return;
+      }
       if(query.events) {
         const examDoc=await store.exams.findOne({_id:this.examKey});
         const mappings=(examDoc?.mappings??[]) as any[];
@@ -173,7 +179,8 @@ export async function apply(ctx: Context) {
         const rows=await store.results.aggregate([{$match:{examId:this.examKey}},{$sort:{completedAt:-1}},{$group:{_id:'$studentId',latest:{$first:'$$ROOT'}}},{$project:{'latest.path':0}}]).toArray();
         const successes=await store.results.aggregate([{$match:{examId:this.examKey,path:{$exists:true}}},{$group:{_id:'$studentId',lastSuccessAt:{$max:'$completedAt'}}}]).toArray();
         const deviceIds=(exam?.mappings??[]).map((m:any)=>m.deviceId);
-        const agentRows=deviceIds.length?await agents.find({_id:{$in:deviceIds}}).toArray():[];
+        const agentDocs=deviceIds.length?await agents.find({_id:{$in:deviceIds}}).toArray():[];
+        const agentRows=agentDocs.map((a:any)=>({_id:a._id,at:a.at,host:a.host,user:a.user,suspects:a.suspects??[],itemCount:(a.items??[]).length,eventCount:(a.events??[]).length}));
         this.response.body={active:exam?.active??false,mappings:exam?.mappings??[],runtime:(exam as any)?.runtime??[],collectorSeenAt:(exam as any)?.collectorSeenAt??null,successes,rows,agents:agentRows};return;
       }
       // A brand-new contest has no mapping yet. Fill it from the students' most recent

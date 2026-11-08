@@ -73,12 +73,21 @@ function Get-AllProcesses {
         try {
             $title = ''
             try { $title = $p.MainWindowTitle } catch { }
-            $list += [pscustomobject]@{ Name = $p.ProcessName + '.exe'; Title = $title; Mb = [int]($p.WorkingSet64 / 1MB); Pid = $p.Id }
+            $list += [pscustomobject]@{ Name = $p.ProcessName + '.exe'; Title = $title; Mb = [int]($p.WorkingSet64 / 1MB); Pid = $p.Id; Sid = $p.SessionId }
         }
         catch { }
     }
     return $list
 }
+
+# Windows components that spawn constantly and would drown the event stream.
+$systemNoise = @(
+    'svchost.exe','conhost.exe','RuntimeBroker.exe','SearchApp.exe','SearchHost.exe',
+    'StartMenuExperienceHost.exe','TextInputHost.exe','ShellExperienceHost.exe','dllhost.exe',
+    'taskhostw.exe','backgroundTaskHost.exe','ctfmon.exe','WmiPrvSE.exe','smartscreen.exe',
+    'SecurityHealthSystray.exe','ApplicationFrameHost.exe','LockApp.exe','SystemSettings.exe',
+    'MoUsoCoreWorker.exe','sihost.exe','fontdrvhost.exe','dwm.exe','explorer.exe','MsMpEng.exe'
+)
 
 function Resolve-Server {
     foreach ($candidate in @('192.168.3.3', '192.168.3.2')) {
@@ -109,6 +118,7 @@ $ip = Get-LocalIp
 
 $prev = @{}
 $lastTitle = @{}
+$mySession = (Get-Process -Id $PID).SessionId
 $pending = New-Object System.Collections.ArrayList
 $lastReport = [datetime]::MinValue
 $lastLine = [datetime]::MinValue
@@ -128,34 +138,40 @@ while ($true) {
     $procs = @(Get-WindowProcesses)
     $all = @(Get-AllProcesses)
     $cur = @{}
-    foreach ($p in $procs) { $cur[[string]$p.Id] = $p }
+    foreach ($p in $all) { $cur[[string]$p.Id] = $p }
 
+    # New processes: anything started in this user session that is not Windows noise,
+    # with or without a window. A background model runner is reported right here.
     foreach ($key in @($cur.Keys)) {
-        if ($prev.ContainsKey($key)) {
+        $p = $cur[$key]
+        if (-not $prev.ContainsKey($key)) {
+            if ($p.Sid -eq $mySession -and $systemNoise -notcontains $p.Name) {
+                [void]$pending.Add([pscustomobject]@{ n = $p.Name; t = $p.Title; act = 'start'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
+                Write-Host ('[+] ' + $p.Name + '  ' + $p.Title) -ForegroundColor Yellow
+            }
+        }
+        else {
             $old = $prev[$key]
-            $new = $cur[$key]
-            if ($old.Title -ne $new.Title) {
+            if ($old.Title -ne $p.Title -and -not [string]::IsNullOrWhiteSpace($p.Title)) {
                 $last = $lastTitle[$key]
                 if (-not $last -or ($now - $last).TotalSeconds -ge 5) {
                     $lastTitle[$key] = $now
-                    [void]$pending.Add([pscustomobject]@{ n = $new.Name; t = $new.Title; act = 'title'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
-                    Write-Host ('[~] ' + $new.Name + '  ' + $new.Title) -ForegroundColor DarkYellow
+                    [void]$pending.Add([pscustomobject]@{ n = $p.Name; t = $p.Title; act = 'title'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
+                    Write-Host ('[~] ' + $p.Name + '  ' + $p.Title) -ForegroundColor DarkYellow
                 }
             }
-        }
-        if (-not $prev.ContainsKey($key)) {
-            $p = $cur[$key]
-            [void]$pending.Add([pscustomobject]@{ n = $p.Name; t = $p.Title; act = 'start'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
-            Write-Host ('[+] ' + $p.Name + '  ' + $p.Title) -ForegroundColor Yellow
         }
     }
     foreach ($key in @($prev.Keys)) {
         if (-not $cur.ContainsKey($key)) {
             $p = $prev[$key]
-            [void]$pending.Add([pscustomobject]@{ n = $p.Name; t = $p.Title; act = 'stop'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
-            Write-Host ('[-] ' + $p.Name + '  ' + $p.Title) -ForegroundColor DarkGray
+            if (-not [string]::IsNullOrWhiteSpace($p.Title) -or ($p.Sid -eq $mySession -and $systemNoise -notcontains $p.Name)) {
+                [void]$pending.Add([pscustomobject]@{ n = $p.Name; t = $p.Title; act = 'stop'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
+                Write-Host ('[-] ' + $p.Name + '  ' + $p.Title) -ForegroundColor DarkGray
+            }
         }
     }
+    if ($pending.Count -gt 60) { $pending.RemoveRange(60, $pending.Count - 60) }
     $prev = $cur
 
     $due = ($now - $lastReport).TotalSeconds -ge $ReportSeconds
