@@ -182,7 +182,7 @@ async function loadHistory(studentId: number) {
 function showProcesses(mapping: any, agent: any) {
   const wrap = el('div', 'em-proc');
   const meta = el('div', 'em-proc-meta',
-    `主机 ${agent.host || '-'} · 用户 ${agent.user || '-'} · 最后上报 ${time(agent.at)} · 共 ${(agent.items || []).length} 个窗口进程`);
+    `主机 ${agent.host || '-'} · 用户 ${agent.user || '-'} · 最后上报 ${time(agent.at)} · 共 ${(agent.items || []).length} 个进程`);
   wrap.append(meta);
 
   const suspects: any[] = agent.suspects || [];
@@ -191,16 +191,26 @@ function showProcesses(mapping: any, agent: any) {
     wrap.append(el('div', 'em-proc-alert', `可疑进程 ${suspects.length} 个：${names}`));
   }
 
-  const list = el('div', 'em-proc-list');
-  const items = [...(agent.items || [])].sort((a: any, b: any) => (suspects.some((s) => s.n === b.n) ? 1 : 0) - (suspects.some((s) => s.n === a.n) ? 1 : 0));
-  for (const item of items) {
-    const line = el('div', suspects.some((s) => s.n === item.n) ? 'em-proc-row bad' : 'em-proc-row');
+  const all: any[] = agent.items || [];
+  const isBad = (i: any) => suspects.some((s) => s.n === i.n);
+  const row = (item: any) => {
+    const line = el('div', isBad(item) ? 'em-proc-row bad' : 'em-proc-row');
     const pid = item.p ? ` (pid ${item.p})` : '';
     line.append(el('b', '', item.n), document.createTextNode(`${pid}${item.t ? ` · ${item.t}` : ''}`), el('span', 'em-proc-mem', `${Math.round((item.m || 0) / 1024)} MB`));
-    list.append(line);
-  }
-  if (!items.length) list.append(el('div', 'em-empty', '没有带窗口的进程'));
+    return line;
+  };
+  const win = all.filter((i) => i.t).sort((a, b) => (isBad(b) ? 1 : 0) - (isBad(a) ? 1 : 0));
+  const bg = all.filter((i) => !i.t).sort((a, b) => (isBad(b) ? 1 : 0) - (isBad(a) ? 1 : 0));
+  const list = el('div', 'em-proc-list');
+  if (!win.length) list.append(el('div', 'em-empty', '没有带窗口的进程'));
+  for (const item of win) list.append(row(item));
   wrap.append(list);
+  if (bg.length) {
+    wrap.append(el('div', 'em-proc-sub', `后台进程（无窗口）${bg.length} 个`));
+    const bgList = el('div', 'em-proc-list');
+    for (const item of bg.slice(0, 120)) bgList.append(row(item));
+    wrap.append(bgList);
+  }
 
   const events: any[] = (agent.events || []).slice(-12).reverse();
   if (events.length) {

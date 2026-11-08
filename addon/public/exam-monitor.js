@@ -190,7 +190,7 @@
     const meta = el(
       "div",
       "em-proc-meta",
-      `\u4E3B\u673A ${agent.host || "-"} \xB7 \u7528\u6237 ${agent.user || "-"} \xB7 \u6700\u540E\u4E0A\u62A5 ${time(agent.at)} \xB7 \u5171 ${(agent.items || []).length} \u4E2A\u7A97\u53E3\u8FDB\u7A0B`
+      `\u4E3B\u673A ${agent.host || "-"} \xB7 \u7528\u6237 ${agent.user || "-"} \xB7 \u6700\u540E\u4E0A\u62A5 ${time(agent.at)} \xB7 \u5171 ${(agent.items || []).length} \u4E2A\u8FDB\u7A0B`
     );
     wrap.append(meta);
     const suspects = agent.suspects || [];
@@ -198,16 +198,26 @@
       const names = groupSuspects(suspects).map((g) => `${g.n}${g.count > 1 ? `\xD7${g.count}` : ""}`).join("\u3001");
       wrap.append(el("div", "em-proc-alert", `\u53EF\u7591\u8FDB\u7A0B ${suspects.length} \u4E2A\uFF1A${names}`));
     }
-    const list = el("div", "em-proc-list");
-    const items = [...agent.items || []].sort((a, b) => (suspects.some((s) => s.n === b.n) ? 1 : 0) - (suspects.some((s) => s.n === a.n) ? 1 : 0));
-    for (const item of items) {
-      const line = el("div", suspects.some((s) => s.n === item.n) ? "em-proc-row bad" : "em-proc-row");
+    const all = agent.items || [];
+    const isBad = (i) => suspects.some((s) => s.n === i.n);
+    const row = (item) => {
+      const line = el("div", isBad(item) ? "em-proc-row bad" : "em-proc-row");
       const pid = item.p ? ` (pid ${item.p})` : "";
       line.append(el("b", "", item.n), document.createTextNode(`${pid}${item.t ? ` \xB7 ${item.t}` : ""}`), el("span", "em-proc-mem", `${Math.round((item.m || 0) / 1024)} MB`));
-      list.append(line);
-    }
-    if (!items.length) list.append(el("div", "em-empty", "\u6CA1\u6709\u5E26\u7A97\u53E3\u7684\u8FDB\u7A0B"));
+      return line;
+    };
+    const win = all.filter((i) => i.t).sort((a, b) => (isBad(b) ? 1 : 0) - (isBad(a) ? 1 : 0));
+    const bg = all.filter((i) => !i.t).sort((a, b) => (isBad(b) ? 1 : 0) - (isBad(a) ? 1 : 0));
+    const list = el("div", "em-proc-list");
+    if (!win.length) list.append(el("div", "em-empty", "\u6CA1\u6709\u5E26\u7A97\u53E3\u7684\u8FDB\u7A0B"));
+    for (const item of win) list.append(row(item));
     wrap.append(list);
+    if (bg.length) {
+      wrap.append(el("div", "em-proc-sub", `\u540E\u53F0\u8FDB\u7A0B\uFF08\u65E0\u7A97\u53E3\uFF09${bg.length} \u4E2A`));
+      const bgList = el("div", "em-proc-list");
+      for (const item of bg.slice(0, 120)) bgList.append(row(item));
+      wrap.append(bgList);
+    }
     const events = (agent.events || []).slice(-12).reverse();
     if (events.length) {
       wrap.append(el("div", "em-proc-sub", "\u6700\u8FD1\u4E8B\u4EF6"));

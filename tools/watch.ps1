@@ -65,6 +65,21 @@ function Get-WindowProcesses {
     return $list
 }
 
+function Get-AllProcesses {
+    # Snapshot list: every process, windowed or not. Background services such as
+    # ollama.exe have no window and would otherwise be invisible.
+    $list = @()
+    foreach ($p in @(Get-Process -ErrorAction SilentlyContinue)) {
+        try {
+            $title = ''
+            try { $title = $p.MainWindowTitle } catch { }
+            $list += [pscustomobject]@{ Name = $p.ProcessName + '.exe'; Title = $title; Mb = [int]($p.WorkingSet64 / 1MB); Pid = $p.Id }
+        }
+        catch { }
+    }
+    return $list
+}
+
 function Resolve-Server {
     foreach ($candidate in @('192.168.3.3', '192.168.3.2')) {
         try {
@@ -111,6 +126,7 @@ Write-Host ''
 while ($true) {
     $now = Get-Date
     $procs = @(Get-WindowProcesses)
+    $all = @(Get-AllProcesses)
     $cur = @{}
     foreach ($p in $procs) { $cur[[string]$p.Id] = $p }
 
@@ -149,7 +165,7 @@ while ($true) {
             host = $hostName
             user = $userName
             ip = $ip
-            items = @($procs | ForEach-Object { @{ n = $_.Name; t = $_.Title; m = $_.Mb; p = $_.Pid } })
+            items = @($all | Sort-Object -Property Mb -Descending | Select-Object -First 250 | ForEach-Object { @{ n = $_.Name; t = $_.Title; m = $_.Mb; p = $_.Pid } })
             events = @($pending.ToArray())
         }
         $ok = $false
@@ -185,7 +201,7 @@ while ($true) {
             $secs = [int](($now - $lastReport).TotalSeconds)
             $ago = '' + $secs + 's ago'
         }
-        Write-Host ('[' + $now.ToString('HH:mm:ss') + '] windowed processes: ' + $procs.Count + '   last report: ' + $ago) -ForegroundColor DarkGray
+        Write-Host ('[' + $now.ToString('HH:mm:ss') + '] processes: ' + $all.Count + ' (' + $procs.Count + ' windowed)   last report: ' + $ago) -ForegroundColor DarkGray
     }
 
     Start-Sleep -Seconds $PollSeconds
