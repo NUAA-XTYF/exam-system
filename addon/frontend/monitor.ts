@@ -227,7 +227,7 @@ async function loadRecords(studentId?: number) {
   for (const row of rows.slice(0, 500)) {
     const line = el('div', row.s || row.act === 'start' ? 'em-proc-row bad' : 'em-proc-row');
     const who = studentId === undefined ? `${row.studentId ? `学生 ${row.studentId}` : row.deviceId} · ` : '';
-    line.append(el('b', '', `${time(row.at)}`), document.createTextNode(`${who}${row.act === 'stop' ? '关闭' : '启动'} ${row.n}${row.t ? ` · ${row.t}` : ''}`));
+    line.append(el('b', '', `${time(row.at)}`), document.createTextNode(`${who}${row.act === 'stop' ? '关闭' : row.act === 'title' ? '标题' : '启动'} ${row.n}${row.t ? ` · ${row.t}` : ''}`));
     list.append(line);
   }
   wrap.append(list);

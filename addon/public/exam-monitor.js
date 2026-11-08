@@ -235,7 +235,7 @@
     for (const row of rows.slice(0, 500)) {
       const line = el("div", row.s || row.act === "start" ? "em-proc-row bad" : "em-proc-row");
       const who = studentId === void 0 ? `${row.studentId ? `\u5B66\u751F ${row.studentId}` : row.deviceId} \xB7 ` : "";
-      line.append(el("b", "", `${time(row.at)}`), document.createTextNode(`${who}${row.act === "stop" ? "\u5173\u95ED" : "\u542F\u52A8"} ${row.n}${row.t ? ` \xB7 ${row.t}` : ""}`));
+      line.append(el("b", "", `${time(row.at)}`), document.createTextNode(`${who}${row.act === "stop" ? "\u5173\u95ED" : row.act === "title" ? "\u6807\u9898" : "\u542F\u52A8"} ${row.n}${row.t ? ` \xB7 ${row.t}` : ""}`));
       list.append(line);
     }
     wrap.append(list);

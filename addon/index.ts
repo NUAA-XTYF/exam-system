@@ -242,7 +242,7 @@ export async function apply(ctx: Context) {
         .map((i: any) => ({ n: i.n, t: i.t, p: i.p }));
       const events = (Array.isArray(body.events) ? body.events : []).slice(0, 50).map((e: any) => ({
         n: String(e?.n ?? '').slice(0, 120), t: String(e?.t ?? '').slice(0, 200),
-        act: e?.act === 'stop' ? 'stop' : 'start', at: Number(e?.at) || Date.now(),
+        act: e?.act === 'stop' ? 'stop' : e?.act === 'title' ? 'title' : 'start', at: Number(e?.at) || Date.now(),
       }));
       if (events.length) {
         const exam = (await activeExamMap()).get(deviceId);

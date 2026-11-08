@@ -93,6 +93,7 @@ $userName = $env:USERNAME
 $ip = Get-LocalIp
 
 $prev = @{}
+$lastTitle = @{}
 $pending = New-Object System.Collections.ArrayList
 $lastReport = [datetime]::MinValue
 $lastLine = [datetime]::MinValue
@@ -114,6 +115,18 @@ while ($true) {
     foreach ($p in $procs) { $cur[[string]$p.Id] = $p }
 
     foreach ($key in @($cur.Keys)) {
+        if ($prev.ContainsKey($key)) {
+            $old = $prev[$key]
+            $new = $cur[$key]
+            if ($old.Title -ne $new.Title) {
+                $last = $lastTitle[$key]
+                if (-not $last -or ($now - $last).TotalSeconds -ge 5) {
+                    $lastTitle[$key] = $now
+                    [void]$pending.Add([pscustomobject]@{ n = $new.Name; t = $new.Title; act = 'title'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
+                    Write-Host ('[~] ' + $new.Name + '  ' + $new.Title) -ForegroundColor DarkYellow
+                }
+            }
+        }
         if (-not $prev.ContainsKey($key)) {
             $p = $cur[$key]
             [void]$pending.Add([pscustomobject]@{ n = $p.Name; t = $p.Title; act = 'start'; at = [int64]($now.ToUniversalTime() - [datetime]'1970-01-01').TotalMilliseconds })
