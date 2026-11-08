@@ -1,6 +1,6 @@
 {% extends "layout/basic.html" %}
 {% block content %}
-<link rel="stylesheet" href="/exam-monitor.css?v=5">
+<link rel="stylesheet" href="/exam-monitor.css?v=6">
 <section class="section em">
   <div class="em-head">
     <div>
@@ -12,7 +12,7 @@
       <button data-action="start" class="primary">开始监考</button>
       <label><input type="checkbox" id="autostop" checked> 到比赛结束时间自动停止</label>
       <button data-action="stop">停止监考</button>
-      <button data-action="importFromLogin">按登录 IP 生成映射</button>
+      <button data-action="importFromLogin">按登录 IP 生成映射</button><button id="em-records">全部记录</button>
     </div>
   </div>
   <p class="em-msg" id="em-msg" role="status"></p>
@@ -32,5 +32,5 @@
     <div class="em-modal-body" id="em-modal-body"></div>
   </div>
 </div>
-<script src="/exam-monitor.js?v=5" defer></script>
+<script src="/exam-monitor.js?v=6" defer></script>
 {% endblock %}

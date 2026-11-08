@@ -120,7 +120,9 @@
     shotBtn.onclick = () => void action("capture", { studentId: mapping.studentId }).catch(showError);
     const historyBtn = el("button", "", "\u5386\u53F2");
     historyBtn.onclick = () => void loadHistory(mapping.studentId).catch(showError);
-    mini.append(shotBtn, historyBtn);
+    const recordBtn = el("button", "", "\u8BB0\u5F55");
+    recordBtn.onclick = () => void loadRecords(mapping.studentId).catch(showError);
+    mini.append(shotBtn, historyBtn, recordBtn);
     if (agent) {
       const procBtn = el("button", "", "\u8FDB\u7A0B");
       procBtn.onclick = () => showProcesses(mapping, agent);
@@ -221,6 +223,24 @@
     }
     openModal(`\u5B66\u751F ${mapping.studentId} \xB7 \u8FDB\u7A0B`, wrap);
   }
+  async function loadRecords(studentId) {
+    const url = studentId === void 0 ? `${location.pathname}?events=1&limit=800` : `${location.pathname}?events=1&limit=800&studentId=${studentId}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("\u65E0\u6CD5\u8BFB\u53D6\u7A0B\u5E8F\u8BB0\u5F55");
+    const { rows } = await response.json();
+    const wrap = el("div", "em-proc");
+    wrap.append(el("div", "em-proc-meta", `\u5171 ${rows.length} \u6761\u8BB0\u5F55\uFF08\u53EA\u4FDD\u7559\u6700\u8FD1 ${30} \u5929\uFF0C\u547D\u4E2D\u89C4\u5219\u7684\u6807\u7EA2\uFF09`));
+    if (!rows.length) wrap.append(el("div", "em-empty", "\u8FD8\u6CA1\u6709\u8BB0\u5F55"));
+    const list = el("div", "em-proc-list");
+    for (const row of rows.slice(0, 500)) {
+      const line = el("div", row.s || row.act === "start" ? "em-proc-row bad" : "em-proc-row");
+      const who = studentId === void 0 ? `${row.studentId ? `\u5B66\u751F ${row.studentId}` : row.deviceId} \xB7 ` : "";
+      line.append(el("b", "", `${time(row.at)}`), document.createTextNode(`${who}${row.act === "stop" ? "\u5173\u95ED" : "\u542F\u52A8"} ${row.n}${row.t ? ` \xB7 ${row.t}` : ""}`));
+      list.append(line);
+    }
+    wrap.append(list);
+    openModal(studentId === void 0 ? "\u5168\u90E8\u7A0B\u5E8F\u8BB0\u5F55" : `\u5B66\u751F ${studentId} \xB7 \u7A0B\u5E8F\u8BB0\u5F55`, wrap);
+  }
   async function refresh() {
     const response = await fetch(`${location.pathname}?status=1`);
     if (!response.ok) throw new Error("\u72B6\u6001\u83B7\u53D6\u5931\u8D25");
@@ -251,6 +271,7 @@
       void action(act, extra).catch(showError);
     };
   });
+  document.getElementById("em-records").onclick = () => void loadRecords().catch(showError);
   document.getElementById("em-modal-close").onclick = () => modal.classList.remove("open");
   modal.addEventListener("click", (e) => {
     if (e.target === modal) modal.classList.remove("open");

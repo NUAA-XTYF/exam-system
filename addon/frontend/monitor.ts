@@ -113,7 +113,9 @@ function renderCard(mapping: any, row: any, runtime: any, okAt: number | undefin
   shotBtn.onclick = () => void action('capture', { studentId: mapping.studentId }).catch(showError);
   const historyBtn = el('button', '', '历史');
   historyBtn.onclick = () => void loadHistory(mapping.studentId).catch(showError);
-  mini.append(shotBtn, historyBtn);
+  const recordBtn = el('button', '', '记录');
+  recordBtn.onclick = () => void loadRecords(mapping.studentId).catch(showError);
+  mini.append(shotBtn, historyBtn, recordBtn);
   if (agent) {
     const procBtn = el('button', '', '进程');
     procBtn.onclick = () => showProcesses(mapping, agent);
@@ -213,6 +215,25 @@ function showProcesses(mapping: any, agent: any) {
   openModal(`学生 ${mapping.studentId} · 进程`, wrap);
 }
 
+async function loadRecords(studentId?: number) {
+  const url = studentId === undefined ? `${location.pathname}?events=1&limit=800` : `${location.pathname}?events=1&limit=800&studentId=${studentId}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('无法读取程序记录');
+  const { rows } = await response.json();
+  const wrap = el('div', 'em-proc');
+  wrap.append(el('div', 'em-proc-meta', `共 ${rows.length} 条记录（只保留最近 ${30} 天，命中规则的标红）`));
+  if (!rows.length) wrap.append(el('div', 'em-empty', '还没有记录'));
+  const list = el('div', 'em-proc-list');
+  for (const row of rows.slice(0, 500)) {
+    const line = el('div', row.s || row.act === 'start' ? 'em-proc-row bad' : 'em-proc-row');
+    const who = studentId === undefined ? `${row.studentId ? `学生 ${row.studentId}` : row.deviceId} · ` : '';
+    line.append(el('b', '', `${time(row.at)}`), document.createTextNode(`${who}${row.act === 'stop' ? '关闭' : '启动'} ${row.n}${row.t ? ` · ${row.t}` : ''}`));
+    list.append(line);
+  }
+  wrap.append(list);
+  openModal(studentId === undefined ? '全部程序记录' : `学生 ${studentId} · 程序记录`, wrap);
+}
+
 async function refresh() {
   const response = await fetch(`${location.pathname}?status=1`);
   if (!response.ok) throw new Error('状态获取失败');
@@ -247,6 +268,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach((button) =
     void action(act, extra).catch(showError);
   };
 });
+document.getElementById('em-records')!.onclick = () => void loadRecords().catch(showError);
 document.getElementById('em-modal-close')!.onclick = () => modal.classList.remove('open');
 modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') modal.classList.remove('open'); });

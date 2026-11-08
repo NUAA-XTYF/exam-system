@@ -42,6 +42,20 @@ export async function apply(ctx: Context) {
     }
   } catch { console.error('Exam monitor: report tokens unavailable, process reporting disabled'); }
   const agents = ctx.db.db.collection('exam.monitor.agents');
+  const processEvents = ctx.db.db.collection('exam.monitor.processEvents');
+  const eventTtlDays = Number(process.env.EXAM_MONITOR_EVENT_TTL_DAYS) || 30;
+  await processEvents.createIndex({ at: 1 }, { expireAfterSeconds: eventTtlDays * 86400 }).catch(() => {});
+  await processEvents.createIndex({ examId: 1, deviceId: 1, at: -1 }).catch(() => {});
+  let examCache = { at: 0, map: new Map<string, { examId: string; studentId: number }>() };
+  const activeExamMap = async () => {
+    if (Date.now() - examCache.at < 5000) return examCache.map;
+    const map = new Map<string, { examId: string; studentId: number }>();
+    for (const e of await store.exams.find({ active: true }).toArray()) {
+      for (const m of e.mappings as any[]) map.set(m.deviceId, { examId: e._id as unknown as string, studentId: m.studentId });
+    }
+    examCache = { at: Date.now(), map };
+    return map;
+  };
   const rulesFile = process.env.EXAM_MONITOR_RULES ?? '/etc/exam-monitor/rules.txt';
   let rulesCache = { at: 0, list: [] as RegExp[] };
   const loadRules = async () => {
@@ -141,6 +155,19 @@ export async function apply(ctx: Context) {
         this.response.type='image/jpeg';this.response.body=createReadStream(row.path);return;
       }
       if(query.history) { const studentId=Number(query.history);const rows=await store.results.find({examId:this.examKey,studentId,path:{$exists:true}}).sort({completedAt:-1}).limit(100).project({path:0}).toArray();this.response.body={rows};return; }
+      if(query.events) {
+        const examDoc=await store.exams.findOne({_id:this.examKey});
+        const mappings=(examDoc?.mappings??[]) as any[];
+        let deviceIds=mappings.map((m)=>m.deviceId);
+        if(query.studentId){
+          const one=mappings.find((m)=>m.studentId===Number(query.studentId));
+          deviceIds=one?[one.deviceId]:[];
+        }
+        const filter:any={deviceId:{$in:deviceIds}};
+        const rows=deviceIds.length?await processEvents.find(filter).sort({at:-1}).limit(Math.min(Number(query.limit)||500,2000)).toArray():[];
+        const rules=await loadRules();
+        this.response.body={rows:rows.map((r:any)=>({...r,_id:undefined,s:rules.some((x)=>x.test(r.n||'')||x.test(r.t||''))}))};return;
+      }
       if(query.status) {
         const exam=await store.exams.findOne({_id:this.examKey});
         const rows=await store.results.aggregate([{$match:{examId:this.examKey}},{$sort:{completedAt:-1}},{$group:{_id:'$studentId',latest:{$first:'$$ROOT'}}},{$project:{'latest.path':0}}]).toArray();
@@ -217,6 +244,14 @@ export async function apply(ctx: Context) {
         n: String(e?.n ?? '').slice(0, 120), t: String(e?.t ?? '').slice(0, 200),
         act: e?.act === 'stop' ? 'stop' : 'start', at: Number(e?.at) || Date.now(),
       }));
+      if (events.length) {
+        const exam = (await activeExamMap()).get(deviceId);
+        const now = Date.now();
+        await processEvents.insertMany(events.map((e: any) => ({
+          deviceId, n: e.n, t: e.t, act: e.act, at: e.at || now, receivedAt: now,
+          examId: exam?.examId ?? null, studentId: exam?.studentId ?? null,
+        })), { ordered: false }).catch(() => {});
+      }
       await agents.updateOne({ _id: deviceId } as any, {
         $set: {
           at: Date.now(), host: String(body.host ?? '').slice(0, 64), user: String(body.user ?? '').slice(0, 64),

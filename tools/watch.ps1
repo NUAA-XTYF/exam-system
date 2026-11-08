@@ -8,7 +8,7 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Server = 'http://192.168.3.2',
+    [string]$Server = '',
     [string]$TokenFile = 'C:\ProgramData\ExamMonitor\token.txt',
     [int]$PollSeconds = 1,
     [int]$ReportSeconds = 30
@@ -64,6 +64,27 @@ function Get-WindowProcesses {
     }
     return $list
 }
+
+function Resolve-Server {
+    foreach ($candidate in @('192.168.3.3', '192.168.3.2')) {
+        try {
+            $probe = New-Object System.Net.Sockets.TcpClient
+            $probe.Connect($candidate, 80)
+            $probe.Close()
+            return 'http://' + $candidate
+        }
+        catch { }
+    }
+    return ''
+}
+
+if ([string]::IsNullOrWhiteSpace($Server)) { $Server = Resolve-Server }
+while ([string]::IsNullOrWhiteSpace($Server)) {
+    Write-Host '[!] Cannot reach the exam server yet, retrying every 30s ...' -ForegroundColor Yellow
+    Start-Sleep -Seconds 30
+    $Server = Resolve-Server
+}
+Write-Host ('[*] Server resolved: ' + $Server) -ForegroundColor Cyan
 
 $reportUrl = ($Server.TrimEnd('/')) + '/d/system/exam-report'
 $headers = @{ 'X-Exam-Token' = $token }
@@ -127,6 +148,15 @@ while ($true) {
         catch {
             $failures++
             Write-Host ('[!] report failed (' + $failures + '): ' + $_.Exception.Message) -ForegroundColor Red
+            if ($failures -ge 3) {
+                $retry = Resolve-Server
+                if ($retry -and $retry -ne $Server) {
+                    $Server = $retry
+                    $reportUrl = ($Server.TrimEnd('/')) + '/d/system/exam-report'
+                    Write-Host ('[*] Server moved, now reporting to ' + $Server) -ForegroundColor Cyan
+                }
+                $failures = 0
+            }
         }
         if ($ok) {
             $failures = 0
