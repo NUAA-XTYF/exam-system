@@ -25,6 +25,22 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === 'DELETE') { stats.deletes++; res.writeHead(200); res.end('{}', done); return; }
   if (req.headers['connection-uid'] !== 'mock-connection') { res.writeHead(401); res.end('{}', done); return; }
+  const mode = process.env.MOCK_MODE || 'plain';
+  if (mode === 'adversarial') {
+    const r = Math.random();
+    if (r < 0.03) { res.writeHead(503); res.end('{}', done); return; }               // frame unavailable
+    if (r < 0.04) { setTimeout(() => { res.writeHead(503); res.end('{}', done); }, 12000); return; } // > 10 s timeout
+    if (r < 0.045) { req.socket.destroy(); done(); return; }                          // connection reset
+    const size = 30 * 1024 + Math.floor(Math.random() * 270 * 1024);                  // 30-300 KB
+    const body = size === FRAME.length ? FRAME : Buffer.concat([Buffer.from('ffd8ff', 'hex'), Buffer.alloc(size - 5, 0x41), Buffer.from('ffd9', 'hex')]);
+    const delay = 600 + Math.floor(Math.random() * 1900);                             // 0.6-2.5 s
+    setTimeout(() => {
+      stats.frames++; stats.bytes += body.length;
+      res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': String(body.length) });
+      res.end(body, done);
+    }, delay);
+    return;
+  }
   setTimeout(() => {
     stats.frames++; stats.bytes += FRAME.length;
     res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': String(FRAME.length) });

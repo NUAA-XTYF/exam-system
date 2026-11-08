@@ -19,7 +19,7 @@ sudo /opt/exam-system/tools/restart.sh >/dev/null
 
 echo '[*] stopping mock server and sampler'
 sudo systemctl stop veyon-mock || true
-sudo pkill -f exam-stress-sampler || true
+sudo pkill -f "tools/stress/sampler[.]js" || true
 
 echo '[*] done. summary:'
 tail -3 /var/log/exam-stress.log || true
